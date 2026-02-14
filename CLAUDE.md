@@ -29,10 +29,12 @@ app/                           # Expo Router file-based routes
   _layout.tsx                  # Root layout (CalendarProvider, Stack navigator)
   event-create.tsx             # Modal: Create event with invitees + availability checker
   event-detail.tsx             # Modal: View full event details
+  event-edit.tsx               # Modal: Edit existing events
   calendar-create.tsx          # Modal: Create new calendar (personal/shared)
   calendar-settings.tsx        # Modal: Edit calendar settings and manage members
   chat-detail.tsx              # Modal: Chat conversation with messaging
   user-search.tsx              # Modal: Search and select users (for chat/events/calendars)
+  profile-edit.tsx             # Modal: Edit user profile (name and email)
   (tabs)/                      # Bottom tab navigator
     _layout.tsx                # Tab config (Home, Calendars, Chat, Profile)
     index.tsx                  # Home: Pending items + upcoming events + AI input
@@ -52,7 +54,7 @@ components/
     time-grid.tsx              # Shared 24-hour grid (used by day + week)
     event-block.tsx            # Event positioned on time grid
     event-card.tsx             # Event card for agenda list
-    event-list.tsx             # FlatList of event cards
+    event-list.tsx             # List of event cards (scrollable via parent)
     upcoming-events.tsx        # Timeline of today/tomorrow/this week events
   form/                        # Reusable form components (5 files)
     form-field.tsx             # Label wrapper
@@ -63,7 +65,7 @@ components/
   ui/                          # UI primitives
     icon-symbol.tsx            # Cross-platform icon (MaterialIcons fallback)
     icon-symbol.ios.tsx        # iOS-specific (SF Symbols)
-  pending-items.tsx            # Pending invitations and AI suggestions
+  pending-items.tsx            # Pending invitations
   availability-viewer.tsx      # Shows user availability for event scheduling
   ai-input-bar.tsx             # AI scheduling input (bottom of Home)
   themed-text.tsx              # Theme-aware Text wrapper
@@ -80,6 +82,7 @@ types/
   index.ts                     # Barrel export
 utils/
   date-helpers.ts              # 16+ date utility functions (including grouping)
+  calendar-helpers.ts          # Calendar color mapping and utilities
 data/
   mock-data.ts                 # Mock calendars, events, users, chats, pending items
 constants/
@@ -124,6 +127,7 @@ No test runner is configured yet.
 - Colors defined in `constants/theme.ts` as `Colors.light.*` / `Colors.dark.*`
 - Additional color keys: `textSecondary`, `surface`, `surfaceSecondary`, `border`, `borderLight`, `danger`, `success`
 - Calendar colors: 8 preset colors exported from `constants/theme.ts` as `calendarColors`
+- **Calendar color mapping:** Use `getCalendarColor(calendarId)` from `@/utils/calendar-helpers` for consistent calendar colors across all components
 - Use `useThemeColor()` hook to resolve colors by theme
 - Use `useColorScheme()` from `@/hooks/use-color-scheme` (not directly from react-native)
 - Wrap text in `<ThemedText>` and views in `<ThemedView>` for automatic theme support
@@ -139,9 +143,24 @@ No test runner is configured yet.
 - Use `StyleSheet.create()` at bottom of file
 - Inline styles only for one-off or dynamic values
 
+### Code Organization & Reusability
+- **Centralize constants and utilities:** Avoid duplicating color mappings, calculations, or logic across files
+- **Calendar colors:** Always use `getCalendarColor()` from `utils/calendar-helpers.ts` instead of hardcoding colors
+- **Date utilities:** Use functions from `utils/date-helpers.ts` for all date operations
+- **Theme colors:** Use `useThemeColor()` hook for dynamic theme-aware colors
+- **Component composition:** Reuse existing components (EventCard, ThemedText, IconSymbol) rather than creating new ones
+- **Avoid premature abstraction:** Only extract utilities when the same code appears in 3+ places
+
 ### State Management
 - **Current:** React Context (`contexts/calendar-context.tsx`)
-- Provides: `calendars`, `events`, `visibleEvents`, `toggleCalendarVisibility`, `addEvent`, `addCalendar`
+- Provides:
+  - **Calendar data:** `calendars`, `events`, `visibleEvents`
+  - **Pending items:** `pendingItems` (calendar invites, event invites, event updates)
+  - **Chat data:** `chats`, `getChatMessages(chatId)`
+  - **Calendar actions:** `toggleCalendarVisibility`, `addEvent`, `addCalendar`
+  - **Event invite actions:** `acceptEventInvite(eventId)`, `declineEventInvite(eventId)` — syncs status across pending items and chat messages
+  - **Chat actions:** `updateChatMessage(chatId, messageId, updates)` — also syncs with pending items when invite status changes
+- **Status syncing:** Accepting/declining event invites updates both pending items and chat messages automatically
 - **Future:** Production state library TBD (see §9.1 — do not implement Redux/Zustand/etc. preemptively)
 
 ## Data Types
@@ -149,11 +168,14 @@ No test runner is configured yet.
 ### Core Types
 - **Calendar** (`types/calendar.ts`): Calendar entity with members, visibility, type (personal/shared)
 - **CalendarEvent** (`types/event.ts`): Event with recurrence, reminders, invitations, designee
-- **User** (`types/user.ts`): User profile with name, email, avatar
+- **User** (`types/user.ts`): User profile with name, username (unique handle), email, avatar
 - **Chat** (`types/chat.ts`): Chat conversation (direct or calendar group) with participants and last message
 - **ChatMessage** (`types/chat.ts`): Individual message with sender, content, read status
+  - Message types: `text`, `event_invite`
+  - Event invites include `eventId` and `inviteStatus` (`pending`, `accepted`, `declined`)
+  - Invite status persists after user responds
 - **PendingItem** (`types/pending.ts`): Pending invitation or suggestion requiring user action
-  - Types: `calendar_invite`, `event_invite`, `event_update`, `ai_suggestion`
+  - Types: `calendar_invite`, `event_invite`, `event_update`
   - Status: `pending`, `accepted`, `declined`
 
 ### Date Utilities (`utils/date-helpers.ts`)
@@ -163,6 +185,11 @@ No test runner is configured yet.
 - **Comparison:** `isSameDay()`
 - **Time grid:** `getEventTopOffset()`, `getEventHeight()`
 - **Labels:** `getMonthName()`, `getDayName()`
+
+### Calendar Utilities (`utils/calendar-helpers.ts`)
+- **CALENDAR_COLORS:** Centralized calendar color mapping (cal-1 through cal-4)
+- **getCalendarColor(calendarId):** Returns calendar color with fallback to default peachy color
+- Used consistently across all calendar components (month view, week view, day view, event lists)
 
 ## Architecture Decisions
 
@@ -178,20 +205,27 @@ No test runner is configured yet.
 - **Home as agenda view** — upcoming events timeline, not calendar grid
 - **Calendars tab for power users** — full calendar grid views and management
 - **Chat integrated with calendars** — each shared calendar has its own group chat
+- **Consistent card design** — event invites in chat use same card design as pending items (icon, title, action buttons)
+- **Modal headers** — all modal screens use custom headers with `headerShown: false` to avoid duplicate navigation bars
+- **Owner-based permissions** — only event creators (createdBy field) can edit or delete events; non-owners see read-only view
+- **Status syncing** — event invite status automatically syncs between pending items and chat messages using shared eventId
 
 ## Features Implemented
 
 ### Home Screen (Agenda View)
 - **Pending Items Section:**
   - Calendar invitations (shared calendar feature showcase)
-  - Event invitations
-  - AI scheduling suggestions
+  - Event invitations (tap to view event details)
+  - Event updates
   - Accept/Decline actions with confirmation
+  - **Status syncing:** Accepting/declining event invites syncs status to chat messages automatically
+  - Shows only items with `status === 'pending'`
   - Color-coded icons by item type
 - **Upcoming Events Timeline:**
   - Grouped by "Today", "Tomorrow", "This Week"
   - Sub-grouped by date within "This Week"
   - Event cards with time, location, calendar color
+  - Tap any event to view full details
   - Empty state with helpful message
 - **AI Input Bar:** Natural-language scheduling input at bottom
 - **Add Button:** Quick access to create new events
@@ -200,9 +234,10 @@ No test runner is configured yet.
 - **Segmented Control:** Toggle between "Calendar" and "Manage" views
 - **Calendar View:**
   - Month View: 6×7 grid with event indicator dots, tap to select day
+    - **Scrollable:** Scroll to see selected day's events below the calendar grid
+    - Event List: Shows all events for selected day below month view
   - Week View: 7-column time grid (6am–11pm) with positioned event blocks
   - Day View: Single-column time grid with positioned event blocks
-  - Event List: Shows events for selected day below month view
   - Calendar filters: Toggle visibility via filter chips
 - **Manage View:**
   - List of all calendars with color, type, member counts
@@ -229,6 +264,7 @@ No test runner is configured yet.
   - Calendar Group Chats: Conversations tied to shared calendars
   - Calendar color indicator on chat items
   - Direct Messages: 1-on-1 conversations
+  - "+" button to start new direct messages
   - Last message preview with smart timestamps ("Just now", "2h", "3d")
   - Unread message badges
   - Sectioned list (Calendar Chats / Direct Messages)
@@ -236,23 +272,40 @@ No test runner is configured yet.
 - **Chat Detail View (Full Messaging):**
   - Real-time message interface with bubble design
   - Send messages with text input and send button
+  - **Event invite messages:**
+    - Card design matching pending items (icon + title + buttons)
+    - Accept/Decline buttons for pending invites (received only)
+    - Status badge for accepted/declined invites (green/red)
+    - **Status syncing:** Accepting/declining event invites syncs status to pending items automatically
+    - Tap card to view full event details
+    - Different appearance for sent vs received invites
   - Message timestamps
   - Sender names for group chats
   - Different bubble styles for sent/received messages
   - Add people to chat via user search
   - Keyboard-aware input bar
 - **User Search:**
-  - Search by name or email
-  - Select multiple users
-  - Used for both chat invites and event invites
+  - Search by username, name, or email
+  - Displays @username handle for each user
+  - Single selection for new direct messages
+  - Multiple selection for event invites and calendar members
+  - Used for chat invites, event invites, and calendar members
   - Visual selection with checkmarks
   - Selected count banner
 
 ### Profile Screen (User Settings)
 - **User Info Display:**
   - Avatar (initial letter placeholder)
-  - Name and email
-  - Edit Profile button
+  - Name, @username handle, and email
+  - Edit Profile button (navigates to edit screen)
+- **Profile Editing:**
+  - Edit name, username, and email fields
+  - Username validation (alphanumeric and underscores only)
+  - Email validation (format check)
+  - Avatar section with "Change Photo" placeholder
+  - Info text about visibility to other users
+  - Save changes with validation
+  - Cancel option
 - **Settings Sections:**
   - **Account:** Notifications, Calendar Sync
   - **Privacy & Security:** Privacy controls
@@ -271,8 +324,8 @@ No test runner is configured yet.
   - Description
   - Recurrence info
   - Reminders list
-  - Edit button (placeholder)
-  - Delete with confirmation
+  - **Edit button** - only visible to event owner (createdBy field)
+  - **Delete button** - only visible to event owner with confirmation
 - **Create Events:**
   - Event fields: title, calendar, all-day toggle, start/end time, location, description
   - **Invite People:**
@@ -286,16 +339,25 @@ No test runner is configured yet.
     - Color-coded: green (available) / red (busy)
     - Summary: "X available • Y busy"
     - Updates when time/date changes
+- **Edit Events:**
+  - **Owner-only permission** - only event creator can edit
+  - Permission denied screen shown to non-owners
+  - Pre-populated form with all existing event data
+  - Modify title, calendar, all-day toggle, start/end time, location, description
+  - Manage invitees (add/remove via user search)
+  - Availability checking for updated times/invitees
+  - Save changes with validation
+  - Cancel option
 - Event display shows time, location, and calendar color
 
 ### AI Features (Placeholder)
 - AI input bar at bottom of Home screen
 - Mic button and send button (alerts "coming soon")
-- AI suggestions appear in pending items
+- AI integration planned for future implementation
 
 ### Navigation
 - 4 tabs: Home (agenda), Calendars (grid + management), Chat (conversations), Profile (settings)
-- Modal screens for event and calendar creation
+- Modal screens for event and calendar creation (all use custom headers with `headerShown: false`)
 - Consistent header design across all screens
 
 ## Constraints (from project.md)
@@ -335,38 +397,64 @@ Do not add abstractions, hooks, or prep code "in anticipation" of these features
 
 The app uses comprehensive mock data for development and testing:
 
-- **Users:** `currentUser` + 3 contacts (Jordan, Taylor, Casey)
+- **Users:** `currentUser` (@alexmorgan) + 3 contacts (@jordanlee, @taylorsmith, @caseyjohnson) with names, usernames, and emails
 - **Calendars:** 4 calendars (Personal, Work, Family, Fitness) with different types and members
-- **Events:** 12 events spanning today through 3 weeks, including:
+- **Events:** 13 events spanning today through 3 weeks, including:
   - Recurring events (daily standups, weekly workouts)
   - All-day events (birthdays)
   - Events with location, reminders, invitations
   - Events across different calendars
+  - **Event-13 (Team Lunch)** and **Event-4 (Dinner with Family)** used for testing status syncing between pending items and chat
 - **Chats:** 3 conversations (2 calendar groups, 1 DM) with last messages and unread counts
-- **Pending Items:** 3 pending items (calendar invite, event invite, AI suggestion)
+  - Chat messages include event invites with Accept/Decline functionality
+  - Event invite messages have status (pending/accepted/declined)
+  - **Work chat** references event-13 (Team Lunch) to match pending items
+  - **Family chat** references event-4 (Dinner with Family) to match pending items
+- **Pending Items:** 3 pending items (1 calendar invite, 2 event invites)
+  - Event invites reference event-13 and event-4 to test status syncing with chat messages
 
 All mock data uses realistic timestamps relative to "now" for testing time-based features.
 
 ## Next Steps (Backend Integration)
 
-When implementing the backend, use the TypeScript types in `types/` as the schema foundation:
+### Database Schema
 
-1. **Calendar schema** → DynamoDB table design with member management
-2. **Event schema** → DynamoDB table with GSI for calendar queries
-3. **User schema** → Cognito + DynamoDB user profile
-4. **Chat schema** → DynamoDB table with messages + real-time via WebSocket
-5. **Pending items schema** → DynamoDB table for invitations and notifications
-6. **API design** → REST endpoints for CRUD operations
-7. **Real-time** → WebSocket for:
+**See `DYNAMODB_SCHEMA.md` for complete schema design.**
+
+Key design decisions:
+- **3 Tables:** PeachyMain (calendars, events, chats, pending items), PeachyUsers (profiles), PeachyMessages (chat messages)
+- **Single-table design** for related entities (calendars, events, members) to avoid joins
+- **Composite keys** for efficient range queries and sorting
+- **GSI overloading** to minimize index costs
+- **Multi-item pattern** for many-to-many relationships (calendar members)
+
+Access patterns optimized for:
+- User's home screen (pending items, calendars, events)
+- Calendar view (metadata, members, events in date range)
+- Chat list (all chats, sorted by recent activity)
+- Real-time messaging (paginated, time-ordered)
+
+### Implementation Steps
+
+1. **User Management** → Cognito for auth + PeachyUsers table for profiles
+2. **Calendar & Events** → PeachyMain table with GSIs for efficient queries
+3. **Chat & Messages** → PeachyMain for chat metadata + PeachyMessages for messages
+4. **Pending Items** → PeachyMain with TTL for auto-cleanup
+5. **API Design** → REST/GraphQL endpoints (AppSync recommended for real-time)
+6. **Real-time** → WebSocket/AppSync subscriptions for:
    - Live calendar updates
    - Chat messages
    - Pending item notifications
-8. **Offline sync** → Conflict resolution strategy (last-write-wins, CRDT, etc.)
-9. **AI Integration** → AWS Bedrock endpoints for natural-language scheduling
+7. **Offline Sync** → Conflict resolution strategy (last-write-wins, optimistic locking)
+8. **AI Integration** → AWS Bedrock endpoints for natural-language scheduling
 
-The frontend is ready to integrate with REST/GraphQL APIs:
-- Replace `CalendarContext` with API calls
-- Add loading/error states to all components
-- Implement optimistic updates for better UX
-- Connect chat to WebSocket for real-time messaging
-- Wire up pending items to notification system
+### Frontend Integration Checklist
+
+The frontend is ready to integrate with backend APIs:
+- ✅ TypeScript types match database schema
+- ✅ Replace `CalendarContext` with API calls
+- ✅ Add loading/error states to all components
+- ✅ Implement optimistic updates for better UX
+- ✅ Connect chat to WebSocket/AppSync for real-time messaging
+- ✅ Wire up pending items to notification system
+- ✅ Add offline storage (AsyncStorage/WatermelonDB for caching)
