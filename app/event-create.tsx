@@ -1,4 +1,4 @@
-import { StyleSheet, ScrollView, View, Pressable, Alert } from 'react-native';
+import { StyleSheet, ScrollView, View, Pressable, Alert, Modal } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
@@ -28,7 +28,8 @@ export default function EventCreateScreen() {
 
   // Pre-fill from AI params or start empty
   const [title, setTitle] = useState(params.title as string || '');
-  const [selectedCalendar] = useState(calendars[0]);
+  const [selectedCalendar, setSelectedCalendar] = useState(calendars[0]);
+  const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [isAllDay, setIsAllDay] = useState(params.isAllDay === 'true');
   const [startDate, setStartDate] = useState(() => {
     if (params.startTime) {
@@ -147,9 +148,7 @@ export default function EventCreateScreen() {
           <FormPickerRow
             label={selectedCalendar.name}
             value={selectedCalendar.type}
-            onPress={() => {
-              Alert.alert('Calendar Picker', 'Full calendar picker coming soon!');
-            }}
+            onPress={() => setShowCalendarPicker(true)}
           />
         </FormField>
 
@@ -256,6 +255,62 @@ export default function EventCreateScreen() {
           </Pressable>
         </View>
       </ScrollView>
+
+      {/* Calendar Picker Modal */}
+      <Modal
+        visible={showCalendarPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCalendarPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => setShowCalendarPicker(false)}
+          />
+          <View style={[styles.modalContent, { backgroundColor: surfaceColor }]}>
+            <View style={styles.modalHeader}>
+              <ThemedText type="subtitle">Select Calendar</ThemedText>
+              <Pressable onPress={() => setShowCalendarPicker(false)}>
+                <IconSymbol name="xmark" size={24} color={tintColor} />
+              </Pressable>
+            </View>
+            <ScrollView style={styles.calendarList}>
+              {calendars.map((calendar) => (
+                <Pressable
+                  key={calendar.id}
+                  style={[
+                    styles.calendarItem,
+                    { borderBottomColor: borderColor },
+                  ]}
+                  onPress={() => {
+                    setSelectedCalendar(calendar);
+                    setShowCalendarPicker(false);
+                  }}
+                >
+                  <View style={styles.calendarInfo}>
+                    <View
+                      style={[
+                        styles.calendarColorDot,
+                        { backgroundColor: calendar.color },
+                      ]}
+                    />
+                    <View style={styles.calendarText}>
+                      <ThemedText type="defaultSemiBold">{calendar.name}</ThemedText>
+                      <ThemedText style={styles.calendarType}>
+                        {calendar.type === 'personal' ? 'Personal' : 'Shared'}
+                      </ThemedText>
+                    </View>
+                  </View>
+                  {selectedCalendar.id === calendar.id && (
+                    <IconSymbol name="checkmark.circle.fill" size={24} color={tintColor} />
+                  )}
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -349,5 +404,61 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontStyle: 'italic',
     opacity: 0.8,
+  },
+  // Calendar Picker Modal
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '70%',
+    paddingBottom: 40,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    paddingBottom: 16,
+  },
+  calendarList: {
+    maxHeight: 400,
+  },
+  calendarItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+  },
+  calendarInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  calendarColorDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 12,
+  },
+  calendarText: {
+    flex: 1,
+  },
+  calendarType: {
+    fontSize: 13,
+    opacity: 0.6,
+    marginTop: 2,
   },
 });

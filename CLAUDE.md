@@ -66,7 +66,7 @@ components/
     icon-symbol.tsx            # Cross-platform icon (MaterialIcons fallback)
     icon-symbol.ios.tsx        # iOS-specific (SF Symbols)
   pending-items.tsx            # Pending invitations
-  availability-viewer.tsx      # Shows user availability for event scheduling
+  availability-viewer.tsx      # Shows user availability for event scheduling with collapsible conflicts
   ai-input-bar.tsx             # AI scheduling input (bottom of Home)
   themed-text.tsx              # Theme-aware Text wrapper
   themed-view.tsx              # Theme-aware View wrapper
@@ -137,7 +137,7 @@ No test runner is configured yet.
 - Use `<IconSymbol>` component — SF Symbols on iOS, MaterialIcons on Android/web
 - Icon names are SF Symbol names (e.g., `"house.fill"`, `"calendar"`, `"mic.fill"`)
 - Add new mappings in `components/ui/icon-symbol.tsx` MAPPING object
-- Current mappings: `house.fill`, `calendar`, `bubble.left.fill`, `person.fill`, `plus`, `mic.fill`, `arrow.up.circle.fill`, `xmark`, `chevron.left`, `chevron.right`, `clock`, `mappin`, `bell`, `repeat`, `person.2`, `note.text`, `checkmark.circle.fill`, `sparkles`
+- Current mappings: `house.fill`, `calendar`, `bubble.left.fill`, `person.fill`, `plus`, `mic.fill`, `arrow.up.circle.fill`, `xmark`, `chevron.left`, `chevron.right`, `chevron.up`, `chevron.down`, `clock`, `mappin`, `bell`, `repeat`, `person.2`, `note.text`, `checkmark.circle.fill`, `sparkles`
 
 ### Styling
 - Use `StyleSheet.create()` at bottom of file
@@ -335,24 +335,32 @@ No test runner is configured yet.
   - **Delete button** - only visible to event owner with confirmation
 - **Create Events:**
   - Event fields: title, calendar, all-day toggle, start/end time, location, description
+  - **Calendar Selection:**
+    - Tap calendar field to open picker modal
+    - Shows all calendars with color dots and type (Personal/Shared)
+    - Current selection marked with checkmark
+    - Tap to select, auto-close
   - **Invite People:**
     - Add invitees by searching username
     - Visual invitee chips with remove option
     - Shows count of invited people
   - **Availability Checker:**
     - Real-time availability view for all invitees
+    - Visual status indicators: checkmark (available) / X icon (busy)
     - Shows "Available" or conflict count per person
-    - Lists conflicting events with times
-    - Color-coded: green (available) / red (busy)
+    - Color-coded borders: green (available) / red (busy)
+    - Collapsible conflict details (tap to expand)
+    - Lists conflicting events with times and icons
     - Summary: "X available • Y busy"
     - Updates when time/date changes
+    - **Smart conflict detection:** When editing events, excludes the current event from conflict checking (event doesn't count as conflicting with itself)
 - **Edit Events:**
   - **Owner-only permission** - only event creator can edit
   - Permission denied screen shown to non-owners
   - Pre-populated form with all existing event data
-  - Modify title, calendar, all-day toggle, start/end time, location, description
+  - Modify title, calendar (via picker modal), all-day toggle, start/end time, location, description
   - Manage invitees (add/remove via user search)
-  - Availability checking for updated times/invitees
+  - Availability checking for updated times/invitees (excludes current event from conflicts)
   - Save changes with validation
   - Cancel option
 - Event display shows time, location, and calendar color
