@@ -155,12 +155,14 @@ No test runner is configured yet.
 - **Current:** React Context (`contexts/calendar-context.tsx`)
 - Provides:
   - **Calendar data:** `calendars`, `events`, `visibleEvents`
-  - **Pending items:** `pendingItems` (calendar invites, event invites, event updates)
+  - **Pending items:** `pendingItems` (calendar invites, event invites, event updates) — lightweight references only
   - **Chat data:** `chats`, `getChatMessages(chatId)`
+  - **User data:** `getUser(userId)` — fetches user by ID for enriching pending items with sender names
   - **Calendar actions:** `toggleCalendarVisibility`, `addEvent`, `addCalendar`
   - **Event invite actions:** `acceptEventInvite(eventId)`, `declineEventInvite(eventId)` — syncs status across pending items and chat messages
   - **Chat actions:** `updateChatMessage(chatId, messageId, updates)` — also syncs with pending items when invite status changes
 - **Status syncing:** Accepting/declining event invites updates both pending items and chat messages automatically
+- **Pending item enrichment:** UI components use `getUser()`, `events`, and `calendars` to derive display data (title, description) from references
 - **Future:** Production state library TBD (see §9.1 — do not implement Redux/Zustand/etc. preemptively)
 
 ## Data Types
@@ -175,9 +177,12 @@ No test runner is configured yet.
   - Message types: `text`, `event_invite`
   - Event invites include `eventId` and `inviteStatus` (`pending`, `accepted`, `declined`)
   - Invite status persists after user responds
-- **PendingItem** (`types/pending.ts`): Pending invitation or suggestion requiring user action
+- **PendingItem** (`types/pending.ts`): Lightweight notification/invitation entity (reference-only)
   - Types: `calendar_invite`, `event_invite`, `event_update`
   - Status: `pending`, `accepted`, `declined`
+  - **Design:** Stores only references (`eventId`, `calendarId`) - full details fetched separately
+  - **No duplication:** Title, description derived from referenced events/calendars client-side
+  - **Client enrichment:** UI components look up event/calendar data via `CalendarContext.getUser()`
 
 ### Date Utilities (`utils/date-helpers.ts`)
 - **Grid generation:** `getMonthGrid()`, `getWeekDates()`
@@ -210,6 +215,7 @@ No test runner is configured yet.
 - **Modal headers** — all modal screens use custom headers with `headerShown: false` to avoid duplicate navigation bars
 - **Owner-based permissions** — only event creators (createdBy field) can edit or delete events; non-owners see read-only view
 - **Status syncing** — event invite status automatically syncs between pending items and chat messages using shared eventId
+- **Reference-only pending items** — PendingItem stores only references (eventId, calendarId), not duplicates; UI enriches with event/calendar data client-side for single source of truth
 
 ## Features Implemented
 
@@ -437,6 +443,13 @@ All mock data uses realistic timestamps relative to "now" for testing time-based
 - Composite keys and GSI strategy
 - S3 storage for avatars and media
 - Migration path from mock data
+- Visual Mermaid diagrams (6 diagrams showing entities, relationships, GSI patterns)
+
+**📄 `SCHEMA_IMPROVEMENTS.md`** - Schema optimization documentation
+- Eliminated PENDING_ITEM and EVENT data overlap
+- Converted pending items to reference-only entities
+- Before/after comparisons and benefits
+- Migration guide for backend implementation
 
 **📄 `API_SPECIFICATION.md`** - Complete API specification
 - 39 REST endpoints
