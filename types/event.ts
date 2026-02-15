@@ -35,5 +35,18 @@ export interface CalendarEvent {
   // AI-generated event fields
   aiGenerated?: boolean;           // true if created from AI parsing
   aiInput?: string;                // raw user input: "plan dinner with Jordan tomorrow at 7pm"
-  aiEditedFields?: string[];       // fields user changed after AI pre-fill
+  aiSuggested?: {                  // what AI originally suggested (for ML evaluation)
+    title?: string;
+    startTime?: string;
+    endTime?: string;
+    location?: string;
+    invitedUserIds?: string[];
+    confidence?: number;           // AI confidence score (0-1)
+    alternatives?: Array<{         // alternative time suggestions
+      startTime: string;
+      endTime: string;
+      reason: string;              // why this alternative was suggested
+    }>;
+  };
+  aiEditedFields?: string[];       // fields user changed after AI pre-fill: ["startTime", "location"]
 }

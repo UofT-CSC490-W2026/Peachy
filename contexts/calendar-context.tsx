@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useMemo } from 'react';
-import { Calendar, CalendarEvent, PendingItem, Chat, ChatMessage } from '@/types';
-import { mockCalendars, mockEvents, mockPendingItems, mockChats } from '@/data/mock-data';
+import { Calendar, CalendarEvent, PendingItem, Chat, ChatMessage, User } from '@/types';
+import { mockCalendars, mockEvents, mockPendingItems, mockChats, currentUser, contacts } from '@/data/mock-data';
 
 interface CalendarContextType {
   calendars: Calendar[];
@@ -8,6 +8,7 @@ interface CalendarContextType {
   visibleEvents: CalendarEvent[];
   pendingItems: PendingItem[];
   chats: Chat[];
+  getUser: (userId: string) => User | undefined;
   toggleCalendarVisibility: (calendarId: string) => void;
   addEvent: (event: CalendarEvent) => void;
   addCalendar: (calendar: Calendar) => void;
@@ -125,6 +126,14 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     return events.filter(event => visibleCalendarIds.has(event.calendarId));
   }, [calendars, events]);
 
+  // Get user by ID (for displaying user info in pending items)
+  const getUser = (userId: string): User | undefined => {
+    if (userId === currentUser.id) {
+      return currentUser;
+    }
+    return contacts.find(user => user.id === userId);
+  };
+
   return (
     <CalendarContext.Provider
       value={{
@@ -133,6 +142,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         visibleEvents,
         pendingItems,
         chats,
+        getUser,
         toggleCalendarVisibility,
         addEvent,
         addCalendar,

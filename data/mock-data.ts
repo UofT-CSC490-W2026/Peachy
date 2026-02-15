@@ -7,6 +7,7 @@ export const currentUser: User = {
   username: 'alexmorgan',
   email: 'alex.morgan@example.com',
   createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
 };
 
 // Contacts
@@ -17,6 +18,7 @@ export const contacts: User[] = [
     username: 'jordanlee',
     email: 'jordan.lee@example.com',
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: 'user-3',
@@ -24,6 +26,7 @@ export const contacts: User[] = [
     username: 'taylorsmith',
     email: 'taylor.smith@example.com',
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: 'user-4',
@@ -31,6 +34,7 @@ export const contacts: User[] = [
     username: 'caseyjohnson',
     email: 'casey.johnson@example.com',
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
 ];
 
@@ -352,15 +356,39 @@ export const mockEvents: CalendarEvent[] = [
     createdBy: 'user-2',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    // AI fields for ML evaluation
+    aiGenerated: true,
+    aiInput: 'lunch with the team this Friday',
+    aiSuggested: {
+      title: 'Team Lunch',
+      startTime: getRelativeDate(4, 12, 0).toISOString(), // AI got time right
+      endTime: getRelativeDate(4, 13, 30).toISOString(),
+      location: 'Office Cafeteria', // AI suggested office cafeteria
+      invitedUserIds: [currentUser.id, 'user-2', 'user-3'],
+      confidence: 0.88,
+      alternatives: [
+        {
+          startTime: getRelativeDate(4, 11, 30).toISOString(),
+          endTime: getRelativeDate(4, 13, 0).toISOString(),
+          reason: 'Earlier lunch (11:30am)',
+        },
+        {
+          startTime: getRelativeDate(4, 13, 0).toISOString(),
+          endTime: getRelativeDate(4, 14, 30).toISOString(),
+          reason: 'Later lunch (1pm)',
+        },
+      ],
+    },
+    aiEditedFields: ['location'], // User changed from Office Cafeteria to Downtown Cafe
   },
-  // AI-generated event (example)
+  // AI-generated event (example with ML evaluation data)
   {
     id: 'event-14',
     calendarId: 'cal-1',
     title: 'Coffee with Jordan',
-    location: 'Starbucks',
-    startTime: getRelativeDate(1, 10, 0).toISOString(), // Tomorrow at 10am
-    endTime: getRelativeDate(1, 11, 0).toISOString(),
+    location: 'Blue Bottle Coffee',
+    startTime: getRelativeDate(1, 10, 30).toISOString(), // Tomorrow at 10:30am (user changed from 10am)
+    endTime: getRelativeDate(1, 11, 30).toISOString(),
     isAllDay: false,
     timezone: 'America/Los_Angeles',
     status: 'confirmed',
@@ -369,10 +397,30 @@ export const mockEvents: CalendarEvent[] = [
     createdBy: currentUser.id,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    // AI fields
+    // AI fields for ML evaluation
     aiGenerated: true,
-    aiInput: 'coffee with Jordan tomorrow at 10am at Starbucks',
-    aiEditedFields: ['location'], // User added location
+    aiInput: 'coffee with Jordan tomorrow morning',
+    aiSuggested: {
+      title: 'Coffee with Jordan',
+      startTime: getRelativeDate(1, 10, 0).toISOString(), // AI suggested 10am
+      endTime: getRelativeDate(1, 11, 0).toISOString(),
+      location: 'Starbucks', // AI suggested Starbucks
+      invitedUserIds: ['user-2'],
+      confidence: 0.87,
+      alternatives: [
+        {
+          startTime: getRelativeDate(1, 9, 0).toISOString(),
+          endTime: getRelativeDate(1, 10, 0).toISOString(),
+          reason: 'Earlier option (9am)',
+        },
+        {
+          startTime: getRelativeDate(1, 11, 0).toISOString(),
+          endTime: getRelativeDate(1, 12, 0).toISOString(),
+          reason: 'Later option (11am)',
+        },
+      ],
+    },
+    aiEditedFields: ['startTime', 'location'], // User changed time and location
   },
 ];
 
@@ -451,48 +499,30 @@ export const mockPendingItems: PendingItem[] = [
   {
     id: 'pending-1',
     type: 'calendar_invite',
-    title: 'Calendar Invitation',
-    description: 'Jordan Lee invited you to join "Work Projects" calendar',
-    calendarId: 'cal-5',
+    calendarId: 'cal-5', // Reference - fetch full calendar details separately
     fromUserId: 'user-2',
     toUserId: currentUser.id,
     status: 'pending',
-    metadata: {
-      calendarName: 'Work Projects',
-      calendarColor: '#E74C3C',
-    },
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(), // 3 hours ago
   },
   {
     id: 'pending-2',
     type: 'event_invite',
-    title: 'Event Invitation',
-    description: 'Team Lunch on Friday at 12:00 PM',
     calendarId: 'cal-2',
-    eventId: 'event-13',
+    eventId: 'event-13', // Reference - fetch full event details separately
     fromUserId: 'user-2',
     toUserId: currentUser.id,
     status: 'pending',
-    metadata: {
-      eventTitle: 'Team Lunch',
-      location: 'Downtown Cafe',
-    },
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(), // 6 hours ago
   },
   {
     id: 'pending-3',
     type: 'event_invite',
-    title: 'Event Invitation',
-    description: 'Dinner with Family tomorrow at 7:00 PM',
     calendarId: 'cal-3',
-    eventId: 'event-4',
+    eventId: 'event-4', // Reference - fetch full event details separately
     fromUserId: 'user-4',
     toUserId: currentUser.id,
     status: 'pending',
-    metadata: {
-      eventTitle: 'Dinner with Family',
-      location: 'Olive Garden',
-    },
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 hours ago
   },
 ];

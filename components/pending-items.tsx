@@ -3,7 +3,9 @@ import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useCalendar } from '@/contexts/calendar-context';
 import { PendingItem } from '@/types';
+import { formatTime } from '@/utils/date-helpers';
 
 interface PendingItemsProps {
   items: PendingItem[];
@@ -13,6 +15,7 @@ interface PendingItemsProps {
 
 export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) {
   const router = useRouter();
+  const { events, calendars, getUser } = useCalendar();
   const surfaceColor = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
   const textSecondary = useThemeColor({}, 'textSecondary');
@@ -45,10 +48,53 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
     }
   };
 
+  // Helper to get display info from referenced entities
+  const getDisplayInfo = (item: PendingItem) => {
+    if (item.type === 'event_invite' && item.eventId) {
+      const event = events.find(e => e.id === item.eventId);
+      if (event) {
+        const eventDate = new Date(event.startTime);
+        const timeStr = event.isAllDay ? 'All day' : formatTime(eventDate);
+        const dateStr = eventDate.toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric'
+        });
+        return {
+          title: 'Event Invitation',
+          description: `${event.title} • ${dateStr} at ${timeStr}`,
+        };
+      }
+    } else if (item.type === 'calendar_invite' && item.calendarId) {
+      const calendar = calendars.find(c => c.id === item.calendarId);
+      const sender = getUser(item.fromUserId);
+      if (calendar && sender) {
+        return {
+          title: 'Calendar Invitation',
+          description: `${sender.name} invited you to join "${calendar.name}" calendar`,
+        };
+      }
+    } else if (item.type === 'event_update' && item.eventId) {
+      const event = events.find(e => e.id === item.eventId);
+      if (event) {
+        return {
+          title: 'Event Updated',
+          description: `"${event.title}" has been updated`,
+        };
+      }
+    }
+
+    return {
+      title: 'Invitation',
+      description: 'Tap to view details',
+    };
+  };
+
   const handleAccept = (item: PendingItem) => {
+    const { title } = getDisplayInfo(item);
     Alert.alert(
       'Accept',
-      `Accept "${item.title}"?`,
+      `Accept "${title}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Accept', onPress: () => onAccept(item.id) },
@@ -57,9 +103,10 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
   };
 
   const handleDecline = (item: PendingItem) => {
+    const { title } = getDisplayInfo(item);
     Alert.alert(
       'Decline',
-      `Decline "${item.title}"?`,
+      `Decline "${title}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Decline', style: 'destructive', onPress: () => onDecline(item.id) },
@@ -75,6 +122,7 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
       {items.map(item => {
         const isEventInvite = item.type === 'event_invite';
         const HeaderWrapper = isEventInvite ? Pressable : View;
+        const { title, description } = getDisplayInfo(item);
 
         return (
           <View
@@ -94,7 +142,7 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
               </View>
               <View style={styles.content}>
                 <ThemedText type="defaultSemiBold" style={styles.title}>
-                  {item.title}
+                  {title}
                   {isEventInvite && (
                     <ThemedText style={[styles.viewDetail, { color: tintColor }]}>
                       {' '}• Tap to view
@@ -105,7 +153,7 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
                   style={[styles.description, { color: textSecondary }]}
                   numberOfLines={2}
                 >
-                  {item.description}
+                  {description}
                 </ThemedText>
               </View>
             </HeaderWrapper>

@@ -4,15 +4,11 @@ export type PendingItemStatus = 'pending' | 'accepted' | 'declined';
 export interface PendingItem {
   id: string;
   type: PendingItemType;
-  title: string;
-  description: string;
-  calendarId?: string;
-  eventId?: string;
+  eventId?: string;      // Reference to event (fetch full details separately)
+  calendarId?: string;   // Reference to calendar (fetch full details separately)
   fromUserId: string;
   toUserId: string;
   status: PendingItemStatus;
-  metadata?: Record<string, unknown>;
   createdAt: string;
-  updatedAt: string;
   respondedAt?: string;
 }
