@@ -1,5 +1,5 @@
 import { StyleSheet, View, ScrollView, Pressable, Alert } from 'react-native';
-import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -63,9 +63,7 @@ export default function EventDetailScreen() {
   };
 
   return (
-    <>
-      <Stack.Screen options={{ headerShown: false }} />
-      <ThemedView style={styles.container}>
+    <ThemedView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
@@ -83,6 +81,16 @@ export default function EventDetailScreen() {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+        {/* AI Attribution Badge */}
+        {event.aiGenerated && event.aiInput && (
+          <View style={[styles.aiBadge, { backgroundColor: tintColor + '10', borderColor: borderColor }]}>
+            <IconSymbol name="sparkles" size={14} color={textSecondary} />
+            <ThemedText style={[styles.aiText, { color: textSecondary }]}>
+              Created from: "{event.aiInput}"
+            </ThemedText>
+          </View>
+        )}
+
         {/* Title with calendar color */}
         <View style={styles.titleSection}>
           <View style={[styles.colorBar, { backgroundColor: calendar.color }]} />
@@ -232,7 +240,6 @@ export default function EventDetailScreen() {
         )}
       </ScrollView>
     </ThemedView>
-    </>
   );
 }
 
@@ -345,5 +352,20 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  aiBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 12,
+    gap: 8,
+  },
+  aiText: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    flex: 1,
   },
 });

@@ -137,7 +137,7 @@ No test runner is configured yet.
 - Use `<IconSymbol>` component — SF Symbols on iOS, MaterialIcons on Android/web
 - Icon names are SF Symbol names (e.g., `"house.fill"`, `"calendar"`, `"mic.fill"`)
 - Add new mappings in `components/ui/icon-symbol.tsx` MAPPING object
-- Current mappings: `house.fill`, `calendar`, `bubble.left.fill`, `person.fill`, `plus`, `mic.fill`, `arrow.up.circle.fill`, `xmark`, `chevron.left`, `chevron.right`, `clock`, `mappin`, `bell`, `repeat`, `person.2`, `note.text`, `checkmark.circle.fill`
+- Current mappings: `house.fill`, `calendar`, `bubble.left.fill`, `person.fill`, `plus`, `mic.fill`, `arrow.up.circle.fill`, `xmark`, `chevron.left`, `chevron.right`, `clock`, `mappin`, `bell`, `repeat`, `person.2`, `note.text`, `checkmark.circle.fill`, `sparkles`
 
 ### Styling
 - Use `StyleSheet.create()` at bottom of file
@@ -168,6 +168,7 @@ No test runner is configured yet.
 ### Core Types
 - **Calendar** (`types/calendar.ts`): Calendar entity with members, visibility, type (personal/shared)
 - **CalendarEvent** (`types/event.ts`): Event with recurrence, reminders, invitations, designee
+  - **AI fields** (optional): `aiGenerated`, `aiInput`, `aiEditedFields` - track AI-created events for RL training
 - **User** (`types/user.ts`): User profile with name, username (unique handle), email, avatar
 - **Chat** (`types/chat.ts`): Chat conversation (direct or calendar group) with participants and last message
 - **ChatMessage** (`types/chat.ts`): Individual message with sender, content, read status
@@ -350,10 +351,17 @@ No test runner is configured yet.
   - Cancel option
 - Event display shows time, location, and calendar color
 
-### AI Features (Placeholder)
-- AI input bar at bottom of Home screen
-- Mic button and send button (alerts "coming soon")
-- AI integration planned for future implementation
+### AI Features (Event Creation via Natural Language)
+- **AI Input Bar:** Bottom of Home screen for natural language scheduling
+- **Text Input:** Type requests like "dinner with Jordan tomorrow at 7pm"
+- **Voice Input:** Mic button (placeholder - voice transcription TBD)
+- **Smart Parsing:** AI extracts title, time, location, invitees from natural language
+- **Pre-fill Form:** Navigates to event create screen with AI-suggested data
+- **User Review:** User can edit all fields before creating event
+- **AI Attribution Badge:** Shows original input on create screen and event detail
+- **Edit Tracking:** Tracks which fields user changed (for RL training)
+- **Mock Parser:** `utils/ai-parser.ts` simulates AI parsing (backend integration TBD)
+- **Future:** AWS Bedrock (Claude Haiku 4.5 for speed, Sonnet 4.5 for complex requests)
 
 ### Navigation
 - 4 tabs: Home (agenda), Calendars (grid + management), Chat (conversations), Profile (settings)
@@ -376,11 +384,14 @@ These are unresolved decisions (see `project.md` §9). If your task depends on o
 
 - **State management library** (Redux, Zustand, Jotai, etc.) — currently using React Context
 - **Offline storage strategy** (AsyncStorage, SQLite, WatermelonDB)
+- **Offline sync conflict resolution** (last-write-wins, CRDTs, operational transforms)
 - **RL architecture details** for AI scheduling
+- **AI model selection** (Claude Haiku for speed vs Sonnet for accuracy)
 - **Default permission templates** for shared calendars
-- **Chat WebSocket implementation** details
 - **Voice-to-text provider** for AI input
 - **Native date/time picker** integration (currently simplified display)
+- **Image processing** for avatars (resize, compress, format conversion)
+- **Message delivery guarantees** (at-least-once vs exactly-once)
 
 ## FUTURE — Do Not Implement
 
@@ -417,44 +428,124 @@ All mock data uses realistic timestamps relative to "now" for testing time-based
 
 ## Next Steps (Backend Integration)
 
-### Database Schema
+### Backend Documentation
 
-**See `DYNAMODB_SCHEMA.md` for complete schema design.**
+**📄 `DYNAMODB_SCHEMA.md`** - Complete database schema design
+- 3-table architecture (PeachyMain, PeachyUsers, PeachyMessages)
+- Single-table design patterns for related entities
+- Access patterns and query examples
+- Composite keys and GSI strategy
+- S3 storage for avatars and media
+- Migration path from mock data
 
-Key design decisions:
-- **3 Tables:** PeachyMain (calendars, events, chats, pending items), PeachyUsers (profiles), PeachyMessages (chat messages)
-- **Single-table design** for related entities (calendars, events, members) to avoid joins
-- **Composite keys** for efficient range queries and sorting
+**📄 `API_SPECIFICATION.md`** - Complete API specification
+- 39 REST endpoints
+- Authentication flows (AWS Cognito)
+- Request/response types for all endpoints
+- Business logic and side effects
+- Chat via polling/refresh (simple, no WebSocket needed for MVP)
+- File upload strategies (S3 presigned URLs)
+- AI endpoints (TBD - AWS Bedrock)
+- Rate limiting and error handling
+- Frontend integration checklist
+
+### Key Design Decisions
+
+**Database:**
+- **3 DynamoDB tables:** PeachyMain (calendars, events, chats, pending items), PeachyUsers (profiles), PeachyMessages (chat history)
+- **Single-table design** for related entities (avoids joins)
+- **Composite keys** for efficient range queries
 - **GSI overloading** to minimize index costs
-- **Multi-item pattern** for many-to-many relationships (calendar members)
+- **Multi-item pattern** for many-to-many relationships
+- **TTL** on pending items for auto-cleanup (30 days)
 
-Access patterns optimized for:
-- User's home screen (pending items, calendars, events)
-- Calendar view (metadata, members, events in date range)
-- Chat list (all chats, sorted by recent activity)
-- Real-time messaging (paginated, time-ordered)
+**API:**
+- **REST API** (API Gateway + Lambda) for CRUD operations
+- **Chat updates** via polling/refresh (no real-time needed for MVP)
+- **Presigned S3 URLs** for file uploads (avatars)
+- **Cognito** for authentication (JWT tokens)
+- **Bedrock** for AI features (TBD)
+
+**Chat Architecture (Simple):**
+- **Pull-to-refresh** for new messages
+- **Optional polling** (5-10s interval when chat is open)
+- **Optimistic updates** for sent messages
+- **Can add WebSocket later** if users request real-time features
 
 ### Implementation Steps
 
-1. **User Management** → Cognito for auth + PeachyUsers table for profiles
-2. **Calendar & Events** → PeachyMain table with GSIs for efficient queries
-3. **Chat & Messages** → PeachyMain for chat metadata + PeachyMessages for messages
-4. **Pending Items** → PeachyMain with TTL for auto-cleanup
-5. **API Design** → REST/GraphQL endpoints (AppSync recommended for real-time)
-6. **Real-time** → WebSocket/AppSync subscriptions for:
-   - Live calendar updates
-   - Chat messages
-   - Pending item notifications
-7. **Offline Sync** → Conflict resolution strategy (last-write-wins, optimistic locking)
-8. **AI Integration** → AWS Bedrock endpoints for natural-language scheduling
+**Phase 1: Core Backend**
+1. **AWS CDK Setup** → Infrastructure as code for all resources
+2. **Cognito User Pool** → Authentication with email/password
+3. **DynamoDB Tables** → Create 3 tables with indexes (PeachyMain, PeachyUsers, PeachyMessages)
+4. **Lambda Layer** → Shared code (DynamoDB client, auth utilities)
+
+**Phase 2: REST API**
+5. **API Gateway REST API** → 39 endpoints
+6. **Lambda Functions** → CRUD operations for users, calendars, events, chats, pending items
+7. **S3 Bucket** → Avatar storage with presigned URLs
+
+**Phase 3: Chat & Advanced Features**
+8. **Chat polling/refresh** → Implement message fetching with optimistic updates
+9. **Offline Sync** → Conflict resolution strategy (last-write-wins, optimistic locking)
+10. **AI Integration** → AWS Bedrock (Claude) for natural-language scheduling (TBD)
+
+**Phase 4: Optional Real-time (Future)**
+11. **WebSocket API** (if needed) → Add real-time message broadcasting
+12. **Connection Management** → Store connections in PeachyUsers table (no 4th table needed)
+13. **Add GSI3** to PeachyUsers → ConnectionId index for quick lookups
+
+**Deployment:**
+- **Environments:** dev (auto-deploy from main) + prod (manual approval from release tags)
+- **Monitoring:** CloudWatch Logs, Metrics, Alarms
 
 ### Frontend Integration Checklist
 
-The frontend is ready to integrate with backend APIs:
-- ✅ TypeScript types match database schema
-- ✅ Replace `CalendarContext` with API calls
-- ✅ Add loading/error states to all components
-- ✅ Implement optimistic updates for better UX
-- ✅ Connect chat to WebSocket/AppSync for real-time messaging
-- ✅ Wire up pending items to notification system
-- ✅ Add offline storage (AsyncStorage/WatermelonDB for caching)
+**Phase 1: Authentication**
+- [ ] Replace mock user with Cognito SDK
+- [ ] Implement login/signup screens
+- [ ] Store JWT tokens in Expo SecureStore
+- [ ] Auto-refresh tokens on 401 errors
+
+**Phase 2: REST API Integration**
+- [ ] Create API client (axios with interceptors)
+- [ ] Replace CalendarContext with API calls
+- [ ] Add loading states to all screens
+- [ ] Add error handling (toast notifications)
+- [ ] Implement optimistic updates (update UI immediately, revert on error)
+
+**Phase 3: Chat & Updates**
+- [ ] Implement pull-to-refresh for chat messages
+- [ ] Add optimistic updates for sent messages
+- [ ] Implement message polling (5s interval when chat is open)
+- [ ] Add loading states for message fetching
+- [ ] Refresh pending items when accepting/declining
+- [ ] Refresh calendar data when navigating to Calendars screen
+- [ ] Add offline queue for failed message sends
+
+**Phase 4: File Uploads**
+- [ ] Implement avatar upload flow (get presigned URL → upload to S3)
+- [ ] Add image picker (expo-image-picker)
+- [ ] Show upload progress
+
+**Phase 5: Offline Support (TBD)**
+- [ ] Set up local database (AsyncStorage or WatermelonDB)
+- [ ] Queue failed requests (retry on reconnect)
+- [ ] Implement conflict resolution strategy
+- [ ] Add offline indicator UI
+
+**Phase 6: AI Features**
+- ✅ AI input bar with text input
+- ✅ Mock AI parser (`utils/ai-parser.ts`)
+- ✅ Pre-fill event create form with AI-suggested data
+- ✅ AI attribution badges (create screen + event detail)
+- ✅ Track edited fields for RL training
+- [ ] Integrate AWS Bedrock (Claude Haiku/Sonnet)
+- [ ] Voice-to-text transcription
+- [ ] Smart scheduling suggestions (auto-detect conflicts, suggest better times)
+- [ ] Auto-schedule (AI picks best time slot based on availability)
+
+**TypeScript Types:**
+- ✅ All types already defined in `types/` directory
+- ✅ Match database schema exactly
+- ✅ Ready to use with API responses

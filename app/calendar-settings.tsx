@@ -1,6 +1,6 @@
 import { StyleSheet, ScrollView, View, Pressable, Alert } from 'react-native';
 import { useState } from 'react';
-import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -90,8 +90,6 @@ export default function CalendarSettingsScreen() {
   };
 
   return (
-    <>
-      <Stack.Screen options={{ headerShown: false }} />
       <ThemedView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
@@ -255,7 +253,6 @@ export default function CalendarSettingsScreen() {
         </Pressable>
       </ScrollView>
     </ThemedView>
-    </>
   );
 }
 

@@ -1,6 +1,6 @@
 import { StyleSheet, View, TextInput, FlatList, Pressable, Alert } from 'react-native';
 import { useState } from 'react';
-import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -112,8 +112,6 @@ export default function UserSearchScreen() {
   };
 
   return (
-    <>
-      <Stack.Screen options={{ headerShown: false }} />
       <ThemedView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
@@ -170,7 +168,6 @@ export default function UserSearchScreen() {
         }
       />
     </ThemedView>
-    </>
   );
 }
 

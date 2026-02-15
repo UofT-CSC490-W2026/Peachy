@@ -33,6 +33,7 @@ const MAPPING = {
   'person.2': 'people',
   'note.text': 'description',
   'checkmark.circle.fill': 'check-circle',
+  'sparkles': 'auto-awesome',
 } as IconMapping;
 
 /**

@@ -1,6 +1,6 @@
 import { StyleSheet, ScrollView, View, Pressable, Alert } from 'react-native';
 import { useState, useEffect } from 'react';
-import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -22,18 +22,47 @@ export default function EventCreateScreen() {
   const surfaceColor = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
 
-  const [title, setTitle] = useState('');
+  // Check if AI-generated
+  const isAIGenerated = params.aiGenerated === 'true';
+  const aiInput = params.aiInput as string | undefined;
+
+  // Pre-fill from AI params or start empty
+  const [title, setTitle] = useState(params.title as string || '');
   const [selectedCalendar] = useState(calendars[0]);
-  const [isAllDay, setIsAllDay] = useState(false);
-  const [startDate, setStartDate] = useState(new Date());
+  const [isAllDay, setIsAllDay] = useState(params.isAllDay === 'true');
+  const [startDate, setStartDate] = useState(() => {
+    if (params.startTime) {
+      return new Date(params.startTime as string);
+    }
+    return new Date();
+  });
   const [endDate, setEndDate] = useState(() => {
+    if (params.endTime) {
+      return new Date(params.endTime as string);
+    }
     const end = new Date();
     end.setHours(end.getHours() + 1);
     return end;
   });
-  const [location, setLocation] = useState('');
+  const [location, setLocation] = useState(params.location as string || '');
   const [description, setDescription] = useState('');
-  const [invitedUserIds, setInvitedUserIds] = useState<string[]>([]);
+  const [invitedUserIds, setInvitedUserIds] = useState<string[]>(() => {
+    if (params.inviteeIds) {
+      const ids = (params.inviteeIds as string).split(',').filter(id => id.trim());
+      return ids;
+    }
+    return [];
+  });
+
+  // Track original AI values for detecting edits
+  const [aiOriginalValues] = useState(() => ({
+    title: params.title as string || '',
+    startTime: params.startTime as string || '',
+    endTime: params.endTime as string || '',
+    location: params.location as string || '',
+    isAllDay: params.isAllDay === 'true',
+    inviteeIds: params.inviteeIds as string || '',
+  }));
 
   // Handle return from user search
   useEffect(() => {
@@ -47,6 +76,17 @@ export default function EventCreateScreen() {
     if (!title.trim()) {
       Alert.alert('Error', 'Please enter an event title');
       return;
+    }
+
+    // Track which fields were edited (if AI-generated)
+    const aiEditedFields: string[] = [];
+    if (isAIGenerated) {
+      if (title.trim() !== aiOriginalValues.title) aiEditedFields.push('title');
+      if (startDate.toISOString() !== aiOriginalValues.startTime) aiEditedFields.push('startTime');
+      if (endDate.toISOString() !== aiOriginalValues.endTime) aiEditedFields.push('endTime');
+      if (location.trim() !== aiOriginalValues.location) aiEditedFields.push('location');
+      if (isAllDay !== aiOriginalValues.isAllDay) aiEditedFields.push('isAllDay');
+      if (invitedUserIds.join(',') !== aiOriginalValues.inviteeIds) aiEditedFields.push('invitedUserIds');
     }
 
     const newEvent = {
@@ -65,6 +105,13 @@ export default function EventCreateScreen() {
       createdBy: 'user-1',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+
+      // Include AI fields if this was AI-generated
+      ...(isAIGenerated && {
+        aiGenerated: true,
+        aiInput,
+        aiEditedFields: aiEditedFields.length > 0 ? aiEditedFields : undefined,
+      }),
     };
 
     addEvent(newEvent);
@@ -74,10 +121,19 @@ export default function EventCreateScreen() {
   };
 
   return (
-    <>
-      <Stack.Screen options={{ headerShown: false }} />
-      <ThemedView style={styles.container}>
+    <ThemedView style={styles.container}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+        {/* AI Badge */}
+        {isAIGenerated && aiInput && (
+          <View style={[styles.aiBadge, { backgroundColor: tintColor + '15', borderColor: tintColor + '30' }]}>
+            <IconSymbol name="sparkles" size={16} color={tintColor} />
+            <View style={styles.aiBadgeContent}>
+              <ThemedText style={[styles.aiBadgeTitle, { color: tintColor }]}>AI suggested</ThemedText>
+              <ThemedText style={styles.aiBadgeInput}>"{aiInput}"</ThemedText>
+            </View>
+          </View>
+        )}
+
         <FormField label="Title" required>
           <FormTextInput
             value={title}
@@ -201,7 +257,6 @@ export default function EventCreateScreen() {
         </View>
       </ScrollView>
     </ThemedView>
-    </>
   );
 }
 
@@ -272,5 +327,27 @@ const styles = StyleSheet.create({
   },
   inviteeChipText: {
     fontSize: 14,
+  },
+  aiBadge: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 20,
+    gap: 12,
+  },
+  aiBadgeContent: {
+    flex: 1,
+  },
+  aiBadgeTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  aiBadgeInput: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    opacity: 0.8,
   },
 });

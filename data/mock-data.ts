@@ -353,6 +353,27 @@ export const mockEvents: CalendarEvent[] = [
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
+  // AI-generated event (example)
+  {
+    id: 'event-14',
+    calendarId: 'cal-1',
+    title: 'Coffee with Jordan',
+    location: 'Starbucks',
+    startTime: getRelativeDate(1, 10, 0).toISOString(), // Tomorrow at 10am
+    endTime: getRelativeDate(1, 11, 0).toISOString(),
+    isAllDay: false,
+    timezone: 'America/Los_Angeles',
+    status: 'confirmed',
+    reminders: [{ minutes: 30, method: 'notification' }],
+    invitedUserIds: ['user-2'],
+    createdBy: currentUser.id,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    // AI fields
+    aiGenerated: true,
+    aiInput: 'coffee with Jordan tomorrow at 10am at Starbucks',
+    aiEditedFields: ['location'], // User added location
+  },
 ];
 
 // Chat messages

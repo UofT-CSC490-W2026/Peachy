@@ -1,6 +1,6 @@
 import { StyleSheet, View, FlatList, TextInput, Pressable, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { useState, useEffect } from 'react';
-import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -239,8 +239,6 @@ export default function ChatDetailScreen() {
   };
 
   return (
-    <>
-      <Stack.Screen options={{ headerShown: false }} />
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -304,7 +302,6 @@ export default function ChatDetailScreen() {
         </View>
       </ThemedView>
     </KeyboardAvoidingView>
-    </>
   );
 }
 

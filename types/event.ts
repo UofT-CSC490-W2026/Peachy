@@ -31,4 +31,9 @@ export interface CalendarEvent {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+
+  // AI-generated event fields
+  aiGenerated?: boolean;           // true if created from AI parsing
+  aiInput?: string;                // raw user input: "plan dinner with Jordan tomorrow at 7pm"
+  aiEditedFields?: string[];       // fields user changed after AI pre-fill
 }

@@ -18,8 +18,16 @@ export default function RootLayout() {
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="event-create" options={{ presentation: 'modal', title: 'New Event' }} />
-          <Stack.Screen name="calendar-create" options={{ presentation: 'modal', title: 'New Calendar' }} />
+
+          {/* Modal screens - all use custom headers */}
+          <Stack.Screen name="event-create" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="event-detail" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="event-edit" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="calendar-create" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="calendar-settings" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="chat-detail" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="user-search" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="profile-edit" options={{ presentation: 'modal', headerShown: false }} />
         </Stack>
         <StatusBar style="auto" />
       </ThemeProvider>

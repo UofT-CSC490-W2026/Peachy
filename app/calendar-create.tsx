@@ -1,6 +1,6 @@
 import { StyleSheet, ScrollView, View, Pressable, Alert } from 'react-native';
 import { useState } from 'react';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { FormField } from '@/components/form/form-field';
@@ -47,8 +47,6 @@ export default function CalendarCreateScreen() {
   };
 
   return (
-    <>
-      <Stack.Screen options={{ headerShown: false }} />
       <ThemedView style={styles.container}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         <FormField label="Name" required>
@@ -130,7 +128,6 @@ export default function CalendarCreateScreen() {
         </View>
       </ScrollView>
     </ThemedView>
-    </>
   );
 }
 
