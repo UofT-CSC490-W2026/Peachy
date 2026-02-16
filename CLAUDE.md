@@ -450,21 +450,6 @@ All mock data uses realistic timestamps relative to "now" for testing time-based
 
 ### Backend Documentation
 
-**📄 `DYNAMODB_SCHEMA.md`** - Complete database schema design
-- 3-table architecture (PeachyMain, PeachyUsers, PeachyMessages)
-- Single-table design patterns for related entities
-- Access patterns and query examples
-- Composite keys and GSI strategy
-- S3 storage for avatars and media
-- Migration path from mock data
-- Visual Mermaid diagrams (6 diagrams showing entities, relationships, GSI patterns)
-
-**📄 `SCHEMA_IMPROVEMENTS.md`** - Schema optimization documentation
-- Eliminated PENDING_ITEM and EVENT data overlap
-- Converted pending items to reference-only entities
-- Before/after comparisons and benefits
-- Migration guide for backend implementation
-
 **📄 `API_SPECIFICATION.md`** - Complete API specification
 - 39 REST endpoints
 - Authentication flows (AWS Cognito)

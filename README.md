@@ -110,7 +110,6 @@ Peachy/
 ├── CLAUDE.md                     # AI agent instructions (source of truth)
 ├── project.md                    # Full project spec
 ├── API_SPECIFICATION.md          # REST API endpoints (39 endpoints)
-├── DYNAMODB_SCHEMA.md            # Database schema (3 tables)
 ├── AI_DATA_PIPELINE.md           # AI parsing + Thompson Sampling
 │
 ├── app.config.js                 # Expo configuration (dynamic, replaces app.json)
@@ -138,7 +137,7 @@ Peachy/
 ## Current Status
 
 **Frontend:** ✅ Complete UI with all screens, calendar views, event management, chat, and peachy pink theme
-**Backend:** ⏳ Not implemented (see API_SPECIFICATION.md + DYNAMODB_SCHEMA.md for design)
+**Backend:** ⏳ Not implemented (see API_SPECIFICATION.md for design)
 **AI Features:** ⏳ Mock parser only (see AI_DATA_PIPELINE.md for implementation plan)
 
 ## Environment Setup
@@ -265,7 +264,6 @@ eas build --profile production --platform all
 - **`CLAUDE.md`** - AI agent instructions (always reference this first)
 - **`project.md`** - Complete project specification
 - **`API_SPECIFICATION.md`** - Backend API design
-- **`DYNAMODB_SCHEMA.md`** - Database schema
 - **`AI_DATA_PIPELINE.md`** - AI parsing workflow
 
 ## Development
