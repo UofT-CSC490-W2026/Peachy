@@ -516,6 +516,10 @@ CalendarEvent
 - Sets createdBy to current user
 - Triggers `onCalendarUpdate` subscription
 - AI fields are stored for RL training (improving AI accuracy over time)
+- **Updates user RlPreferences (Thompson Sampling):**
+  - If aiGenerated=true and user accepted AI time: increment α for that time slot
+  - If aiGenerated=true and user changed time: increment β for AI slot, α for new slot
+  - Time slots are "DayOfWeek_Hour" format (e.g., "Saturday_14" for Sat 2pm)
 
 ---
 
@@ -551,6 +555,9 @@ CalendarEvent
 - Creates pending items (event_update) for existing invitees if time/date changes
 - Updates invite messages in chat
 - Triggers `onCalendarUpdate` subscription
+- **Updates user RlPreferences (Thompson Sampling):**
+  - If event was aiGenerated=true and time was changed: increment β for old slot, α for new slot
+  - Learns user's true time preferences over time via exploration-exploitation trade-off
 
 ---
 

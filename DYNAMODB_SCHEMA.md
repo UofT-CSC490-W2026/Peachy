@@ -293,6 +293,7 @@ classDiagram
         +Email: string (unique)
         +Name: string
         +AvatarUrl: string (S3)
+        +RlPreferences: object
         +CreatedAt: timestamp
         +UpdatedAt: timestamp
     }
@@ -626,7 +627,18 @@ mindmap
   Name: string,
   AvatarUrl: string,
   CreatedAt: string,
-  UpdatedAt: string
+  UpdatedAt: string,
+
+  // RL Preferences (Thompson Sampling for 168 weekly time slots)
+  RlPreferences: {
+    timeSlotPreferences: {
+      // 168 time slots: "Monday_00", "Monday_01", ..., "Sunday_23"
+      [timeSlot: string]: {
+        alpha: number,  // acceptance count (starts at 1, increments on accept)
+        beta: number    // rejection count (starts at 1, increments on decline)
+      }
+    }
+  }
 }
 ```
 

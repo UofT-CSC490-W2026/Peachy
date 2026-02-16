@@ -171,7 +171,13 @@ No test runner is configured yet.
 - **Calendar** (`types/calendar.ts`): Calendar entity with members, visibility, type (personal/shared)
 - **CalendarEvent** (`types/event.ts`): Event with recurrence, reminders, invitations, designee
   - **AI fields** (optional): `aiGenerated`, `aiInput`, `aiEditedFields` - track AI-created events for RL training
+  - When users accept/decline AI-suggested times, Thompson Sampling updates alpha/beta counts:
+    - Accept → increment α for that time slot
+    - Change time → increment β for AI slot, α for new slot
 - **User** (`types/user.ts`): User profile with name, username (unique handle), email, avatar
+  - **RlPreferences** (optional): Thompson Sampling for 168 weekly time slots (Monday_00 through Sunday_23)
+    - Each slot has alpha (acceptance count) and beta (rejection count)
+    - AI uses these to suggest times user prefers via exploration-exploitation balance
 - **Chat** (`types/chat.ts`): Chat conversation (direct or calendar group) with participants and last message
 - **ChatMessage** (`types/chat.ts`): Individual message with sender, content, read status
   - Message types: `text`, `event_invite`

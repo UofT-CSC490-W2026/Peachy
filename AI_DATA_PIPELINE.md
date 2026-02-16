@@ -7,8 +7,8 @@
 | **Frontend** | React Native (Expo) | User input & form pre-fill |
 | **API** | AWS API Gateway + Lambda (Node.js) | REST endpoints |
 | **AI** | AWS Bedrock (Claude Haiku 4.5 / Sonnet 4.5) | NLP parsing |
-| **Database** | DynamoDB | Event storage |
-| **RL Framework** | AWS SageMaker (future) | Model fine-tuning |
+| **Database** | DynamoDB | Event storage + Thompson Sampling preferences |
+| **RL Framework** | Thompson Sampling (in-app) | Learn user time preferences |
 
 ---
 
@@ -28,31 +28,59 @@ Lambda: ai-parse
 
 ---
 
-### Overview: Three Pipelines Working Together
+### Overview: Two Pipelines Working Together
 
 ```mermaid
 graph LR
     subgraph "Real-time Pipeline"
-        P1[🎯 Pipeline 1<br/>AI Parsing<br/>&lt;1s latency]
-    end
-
-    subgraph "Batch Pipeline"
-        P2[📊 Pipeline 2<br/>RL Training<br/>Daily 2am]
+        P1[🎯 Pipeline 1<br/>AI Parsing<br/>2-4s latency]
     end
 
     subgraph "Monitoring Pipeline"
-        P3[📈 Pipeline 3<br/>Metrics<br/>Real-time]
+        P2[📈 Pipeline 2<br/>Metrics<br/>Real-time]
     end
 
     USER[👤 User] -->|Types input| P1
     P1 -->|Creates event| DB[(🗄️ DynamoDB)]
-    P1 -.->|Logs metrics| P3
-    DB -->|Scans daily| P2
-    P2 -->|Improves model| P1
+    P1 -->|Updates Thompson Sampling| DB
+    P1 -.->|Logs metrics| P2
 
     style P1 fill:#FFE5D9
-    style P2 fill:#D9FFE8
-    style P3 fill:#E8D9FF
+    style P2 fill:#E8D9FF
+```
+
+**Thompson Sampling Updates:**
+- When user accepts AI suggestion → increment α (success) for suggested time slot
+- When user changes time → increment β (rejection) for AI slot, α for chosen slot
+- Updates happen immediately during event creation (no batch processing needed)
+
+---
+
+## Thompson Sampling for Time Preferences
+
+**How It Works:**
+1. Each user has 168 time slots (Monday_00 through Sunday_23)
+2. Each slot tracks α (successes) and β (rejections) - starts at α=1, β=1
+3. When AI suggests a time:
+   - Sample from Beta(α, β) distribution for each slot
+   - Higher α/β ratio = higher belief user likes that time
+   - Pick top 20 slots as suggestions
+4. When user creates event:
+   - **Accepts AI suggestion** → increment α for that slot
+   - **Changes time** → increment β for AI slot, α for chosen slot
+5. Over time, AI learns user preferences (e.g., prefers 8pm over 7pm for dinner)
+
+**Example:**
+```
+Initial:  Saturday_19: α=1, β=1  (50% belief)
+          Saturday_20: α=1, β=1  (50% belief)
+
+After 10 dinners:
+AI suggests 7pm, user changes to 8pm (10 times)
+→ Saturday_19: α=1, β=11  (8% belief - user dislikes 7pm)
+→ Saturday_20: α=11, β=1  (92% belief - user loves 8pm)
+
+Result: AI now suggests 8pm for dinner instead of 7pm
 ```
 
 ---
@@ -90,7 +118,7 @@ classDiagram
     Event --> AiSuggested : contains
     AiSuggested --> Alternative : suggests
 
-    note for Event "User changed:<br/>• Time: 7pm → 8pm<br/>• Location: Downtown Cafe → Olive Garden<br/><br/>RL learns: Users prefer 8pm over 7pm"
+    note for Event "User changed:<br/>• Time: 7pm → 8pm<br/>• Location: Downtown Cafe → Olive Garden<br/><br/>Thompson Sampling Update:<br/>Saturday_19: β+1 (rejected 7pm)<br/>Saturday_20: α+1 (chose 8pm)"
 ```
 
 ---
@@ -113,17 +141,9 @@ graph TB
         RESPONSE[📤 Return JSON Response:<br/>Suggested time + alternatives]
     end
 
-    subgraph "Pipeline 2: Batch RL Training"
-        CRON[⏰ EventBridge<br/>Daily 2am UTC]
-        SCAN[📋 Scan DynamoDB<br/>AI-generated events]
-        ANALYZE[📈 Analyze:<br/>• Edit rate<br/>• Accuracy<br/>• Patterns]
-        S3[💾 Export to S3<br/>Training data]
-        SAGE[🎓 SageMaker<br/>Model fine-tuning]
-    end
-
-    subgraph "Pipeline 3: Real-time Metrics"
+    subgraph "Pipeline 2: Real-time Metrics"
         METRICS[📊 CloudWatch Metrics]
-        ALARM[🚨 Alarms:<br/>• Latency > 1s<br/>• Confidence < 0.7]
+        ALARM[🚨 Alarms:<br/>• Latency > 5s<br/>• Confidence < 0.7]
     end
 
     subgraph "Frontend"
@@ -150,16 +170,11 @@ graph TB
     BEDROCK -.->|Log metrics| METRICS
     METRICS -.-> ALARM
 
-    CRON --> SCAN
-    DYNAMO --> SCAN
-    SCAN --> ANALYZE
-    ANALYZE --> S3
-    S3 --> SAGE
+    EVENT -.->|Update Thompson Sampling| DYNAMO
 
     style U fill:#FFE5D9
     style BEDROCK fill:#D9E8FF
     style DYNAMO fill:#E8D9FF
-    style SAGE fill:#D9FFE8
 ```
 
 ---
@@ -188,8 +203,8 @@ sequenceDiagram
         DB-->>Lambda: Events: [9am-5pm Work]
         Lambda->>DB: Get Jordan's events (tomorrow)
         DB-->>Lambda: Events: [6pm-8pm Gym]
-        Lambda->>DB: Get dinner preferences
-        DB-->>Lambda: Prefs: usual time 7pm, duration 90min
+        Lambda->>DB: Get user RlPreferences (time slots)
+        DB-->>Lambda: timeSlotPreferences: {Saturday_14: {α:8, β:2}, Monday_09: {α:2, β:7}, ...}
 
         Lambda->>Lambda: Calculate mutual availability<br/>Free: 5-6pm, 8-11:59pm
         Note over Lambda,Bedrock: Lambda calls Bedrock SDK
@@ -223,7 +238,12 @@ sequenceDiagram
 ### Pipeline 1: Real-time Event Creation (User-triggered)
 
 **When:** User types natural language → creates event
-**Latency:** <1 second end-to-end
+**Latency:** 2-4 seconds end-to-end (AWS Bedrock API call is the bottleneck)
+
+**UX Strategy:** Use optimistic UI patterns to hide latency:
+- Show loading spinner immediately when user taps send
+- Pre-fill form as soon as response arrives
+- User doesn't wait for AI - form opens with "Parsing..." then populates fields
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -256,7 +276,7 @@ sequenceDiagram
 
                     →   Claude Haiku 4.5     →   { title: "Dinner",
                         + Context                  startTime: "7pm"
-                        ~300ms                     (avoids conflicts!)
+                        ~1.5-2s                    (avoids conflicts!)
                                                    invitees: ["user-2"]
                                                    suggestedTimes: [
                                                      "6pm (available)",
@@ -283,41 +303,7 @@ sequenceDiagram
                                                   + Atomic writes
 ```
 
-### Pipeline 2: Batch RL Training (Scheduled)
-
-**When:** Daily at 2am UTC
-**Purpose:** Improve AI accuracy from user feedback
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                    BATCH PIPELINE (Daily)                         │
-└──────────────────────────────────────────────────────────────────┘
-
-   EventBridge              Lambda                  Analytics
-   ─────────────────────────────────────────────────────────────────
-
-   Cron: 0 2 * * *   →   Scan DynamoDB     →   Extract Features
-   (Daily 2am)           (AI-generated           ────────────────
-                         events only)            aiInput
-                                                 aiEditedFields
-                                                 Final event data
-
-   ─────────────────────────────────────────────────────────────────
-                              ↓
-                         Aggregate Stats
-                         ────────────────
-                         • Edit rate by field
-                         • Common patterns
-                         • Confidence vs accuracy
-                              ↓
-   ─────────────────────────────────────────────────────────────────
-
-   Model Update      ←   SageMaker         ←   Training Data
-   (if needed)           Fine-tuning            (S3 bucket)
-                         Pipeline
-```
-
-### Pipeline 3: Real-time Metrics (Per request)
+### Pipeline 2: Real-time Metrics (Per request)
 
 **When:** Every AI parse request
 **Purpose:** Monitor performance
@@ -332,7 +318,7 @@ sequenceDiagram
 
    Parse completes   →   Log Metrics        →   Alert if:
    ────────────────      ────────────           ────────────
-   • Duration            • ParseDuration        • >1s latency
+   • Duration            • ParseDuration        • >5s latency
    • Confidence          • Confidence           • <0.7 confidence
    • User edits          • EditRate             • >50% edit rate
 ```
@@ -503,7 +489,7 @@ Return JSON with suggested time + alternative options.`;
   },
   "confidence": 0.92,
   "ambiguities": [],
-  "processingTimeMs": 387
+  "processingTimeMs": 2100
 }
 ```
 
@@ -536,37 +522,46 @@ Return JSON with suggested time + alternative options.`;
 }
 ```
 
-### RL Training Schema
+### Thompson Sampling Updates (Real-time)
 
-**Training Data Export (Daily)**
+**When User Creates Event:**
+```typescript
+// If user accepts AI suggestion (8pm)
+updateUserPreferences(userId, {
+  timeSlotPreferences: {
+    Saturday_20: {
+      alpha: currentAlpha + 1,  // Increment success count
+      beta: currentBeta         // Keep rejection count same
+    }
+  }
+});
+
+// If user changes time (7pm → 8pm)
+updateUserPreferences(userId, {
+  timeSlotPreferences: {
+    Saturday_19: {
+      alpha: currentAlpha,
+      beta: currentBeta + 1     // Increment rejection (AI was wrong)
+    },
+    Saturday_20: {
+      alpha: currentAlpha + 1,  // Increment success (user prefers this)
+      beta: currentBeta
+    }
+  }
+});
+```
+
+**Stored in DynamoDB (PeachyUsers table):**
 ```json
 {
-  "timestamp": "2026-02-14T02:00:00Z",
-  "eventCount": 1247,
-  "samples": [
-    {
-      "aiInput": "dinner with Jordan tomorrow at 7pm",
-      "aiExtracted": {
-        "title": "Dinner",
-        "startTime": "2026-02-15T19:00:00Z",
-        "location": null
-      },
-      "userFinal": {
-        "title": "Dinner with Jordan",
-        "startTime": "2026-02-15T19:00:00Z",
-        "location": "Downtown Restaurant"
-      },
-      "editedFields": ["title", "location"],
-      "outcome": "accepted"
-    }
-  ],
-  "stats": {
-    "totalAiEvents": 1247,
-    "editRate": 0.34,
-    "mostEditedFields": {
-      "title": 289,
-      "location": 187,
-      "startTime": 95
+  "PK": "USER#user-1",
+  "SK": "METADATA",
+  "RlPreferences": {
+    "timeSlotPreferences": {
+      "Monday_09": { "alpha": 2, "beta": 7 },
+      "Saturday_14": { "alpha": 8, "beta": 2 },
+      "Saturday_19": { "alpha": 5, "beta": 12 },
+      "Saturday_20": { "alpha": 15, "beta": 3 }
     }
   }
 }
@@ -579,7 +574,7 @@ Return JSON with suggested time + alternative options.`;
 ### Use Case 1: Simple Parsing (No availability check)
 **Trigger:** User specifies exact time
 **Pipeline:** Real-time (Pipeline 1) - Skip availability fetch
-**SLA:** <500ms (faster - no DB queries)
+**SLA:** 1.5-2s (faster - no DB queries, just Bedrock call)
 **Example:**
 ```
 Input:  "coffee with Taylor tomorrow 10am"
@@ -590,7 +585,7 @@ Output: Pre-filled form (user didn't ask for suggestions)
 ### Use Case 2: Smart Scheduling (Availability-aware)
 **Trigger:** User asks to "plan" or doesn't specify time
 **Pipeline:** Real-time (Pipeline 1) - WITH availability fetch
-**SLA:** <1 second (includes DB queries)
+**SLA:** 2.5-4s (includes DB queries + Bedrock call with context)
 **Example:**
 ```
 Input:  "plan dinner with Jordan tomorrow"
@@ -609,71 +604,36 @@ AI Processing:
 Output: Pre-filled form with smart time + alternatives shown
 ```
 
-### Use Case 3: Model Improvement (RL)
-**Trigger:** Scheduled (daily 2am UTC)
-**Pipeline:** Batch RL (Pipeline 2)
-**SLA:** Complete within 1 hour
+### Use Case 3: Thompson Sampling Update (Real-time)
+**Trigger:** User creates or modifies AI-suggested event
+**Pipeline:** Real-time (Pipeline 1)
+**SLA:** <50ms (atomic DynamoDB update)
 **Example:**
 ```
-Analyze: 1,247 AI-generated events from yesterday
-Find:    AI suggested 7pm, user changed to 8pm (23% of cases)
-Insight: Users prefer 8pm over 7pm for dinner
-Action:  Update prompt to default dinner to 8pm instead of 7pm
+User accepts AI suggestion for 8pm:
+→ Increment α for Saturday_20 time slot (success)
+
+User changes 7pm to 8pm:
+→ Increment β for Saturday_19 (rejected AI suggestion)
+→ Increment α for Saturday_20 (user preference)
+
+Result: Over time, AI learns user prefers 8pm over 7pm for dinner
 ```
 
 ### Use Case 4: Performance Monitoring
 **Trigger:** Every API request
-**Pipeline:** Metrics (Pipeline 3)
+**Pipeline:** Metrics (Pipeline 2)
 **SLA:** Real-time
 **Example:**
 ```
-Detect: Availability fetch taking >300ms
-Alert:  DynamoDB query slow (needs index optimization)
-Action: Add GSI3 for date-range queries
+Detect: Total request taking >6s (DB queries: 800ms, Bedrock: 4.5s)
+Alert:  Bedrock latency spike detected
+Action: Investigate Bedrock throttling or switch to cached responses
 ```
 
 ---
 
-### Pipeline 2: Batch RL Training (Visual)
-
-```mermaid
-flowchart LR
-    subgraph "Trigger"
-        CRON[⏰ EventBridge Cron<br/>Daily 2am UTC]
-    end
-
-    subgraph "Data Collection"
-        SCAN[📋 Scan DynamoDB<br/>Filter: AiGenerated = true]
-        EXTRACT[🔍 Extract Features:<br/>• aiInput<br/>• aiSuggested<br/>• Final event data<br/>• aiEditedFields]
-    end
-
-    subgraph "Analysis"
-        CALC[📊 Calculate Metrics:<br/>• Accuracy by field<br/>• Edit rate<br/>• Time error magnitude<br/>• Common patterns]
-        AGG[📈 Aggregate:<br/>• Total events: 1247<br/>• Title accuracy: 95%<br/>• Time accuracy: 65%<br/>• Location accuracy: 40%]
-    end
-
-    subgraph "Training"
-        EXPORT[💾 Export to S3:<br/>s3://peachy-ml-training/<br/>events/2026-02-15.json]
-        SAGE[🎓 SageMaker:<br/>Fine-tune model<br/>if accuracy drops]
-        UPDATE[🔄 Update Prompt:<br/>Apply learnings<br/>to production]
-    end
-
-    CRON --> SCAN
-    SCAN --> EXTRACT
-    EXTRACT --> CALC
-    CALC --> AGG
-    AGG --> EXPORT
-    EXPORT --> SAGE
-    SAGE --> UPDATE
-
-    style CRON fill:#FFE5D9
-    style SAGE fill:#D9FFE8
-    style UPDATE fill:#E8D9FF
-```
-
----
-
-### Pipeline 3: Real-time Metrics (Visual)
+### Pipeline 2: Real-time Metrics (Visual)
 
 ```mermaid
 flowchart TD
@@ -684,13 +644,13 @@ flowchart TD
     end
 
     subgraph "Metrics Collection"
-        LOG[📝 Log Metrics:<br/>• Duration: 387ms<br/>• Confidence: 0.92<br/>• User edited: false]
+        LOG[📝 Log Metrics:<br/>• Duration: 2.1s<br/>• Confidence: 0.92<br/>• User edited: false]
         CW[☁️ CloudWatch Metrics:<br/>• ParseDuration<br/>• Confidence<br/>• EditRate]
     end
 
     subgraph "Monitoring"
         CHECK{Thresholds<br/>Exceeded?}
-        ALARM1[🚨 Latency > 1s]
+        ALARM1[🚨 Latency > 5s]
         ALARM2[🚨 Confidence < 0.7]
         ALARM3[🚨 Edit Rate > 50%]
         SNS[📧 SNS Alert to Team]
@@ -701,7 +661,7 @@ flowchart TD
     RESULT --> LOG
     LOG --> CW
     CW --> CHECK
-    CHECK -->|Duration > 1s| ALARM1
+    CHECK -->|Duration > 5s| ALARM1
     CHECK -->|Confidence < 0.7| ALARM2
     CHECK -->|Edit Rate > 50%| ALARM3
     ALARM1 --> SNS
@@ -918,17 +878,6 @@ await dynamodb.transactWrite([
 ]);
 ```
 
-### EventBridge Schedule (RL Training)
-
-```yaml
-ScheduleExpression: cron(0 2 * * ? *)  # Daily 2am UTC
-Target: Lambda (RL-training-pipeline)
-Input:
-  tableName: PeachyMain
-  dateRange: last24hours
-  exportTo: s3://peachy-ml-training/events/
-```
-
 ---
 
 ## Performance & Cost Optimization
@@ -936,12 +885,17 @@ Input:
 | Optimization | Technology | Impact |
 |-------------|-----------|---------|
 | **Model Selection** | Haiku (simple) vs Sonnet (complex) | 92% cost reduction |
-| **User Context Caching** | Lambda in-memory cache (5min TTL) | 150ms latency reduction |
-| **Optimistic UI** | Frontend immediate update | Instant UX |
+| **User Context Caching** | Lambda in-memory cache (5min TTL) | 200-300ms latency reduction |
+| **Optimistic UI** | Frontend immediate update | Instant UX (hides Bedrock latency) |
 
-**Cost per Parse:**
-- Haiku: $0.0002 (~200ms)
-- Sonnet: $0.0024 (~500ms)
+**Cost & Latency per Parse:**
+- Haiku: $0.0002 (~1.5-2s typical)
+- Sonnet: $0.0024 (~3-5s typical)
+
+**Future Optimization Options:**
+- **Prompt Caching:** Cache system prompts (availability context) to reduce Bedrock tokens processed
+- **Response Streaming:** Stream Bedrock response to show partial results faster
+- **Pre-warming:** Cache common suggestions (e.g., "lunch" → 12pm) for instant responses
 
 ---
 
@@ -964,9 +918,9 @@ Input:
 
 | Metric | Threshold | Action |
 |--------|-----------|--------|
-| ParseDuration > 1s | P95 | Scale Lambda |
+| ParseDuration > 5s | P95 | Investigate Bedrock latency |
 | Confidence < 0.7 | 10% of requests | Review prompts |
-| EditRate > 50% | 3 days avg | Trigger RL training |
+| EditRate > 50% | 3 days avg | Review AI suggestions |
 
 ---
 
@@ -978,8 +932,8 @@ Input:
 
 | Mode | Trigger | Latency | DB Queries | Use Case |
 |------|---------|---------|------------|----------|
-| **Fast Path** | Exact time in input | <500ms | 0 | "coffee at 10am" |
-| **Smart Path** | "plan" keyword or participants | <1s | 2-5 | "plan dinner with Jordan" |
+| **Fast Path** | Exact time in input | 1.5-2s | 0 | "coffee at 10am" |
+| **Smart Path** | "plan" keyword or participants | 2.5-4s | 2-5 | "plan dinner with Jordan" |
 
 **Fast Path Flow:**
 ```
@@ -996,14 +950,7 @@ Input → Lambda → [Fetch Availability] → Bedrock + Context → Pre-fill For
                  DynamoDB (preferences)
 ```
 
-### Pipeline 2: Batch RL Training
-**Trigger:** EventBridge cron `0 2 * * *`
-**Frequency:** Daily at 2am UTC
-**SLA:** Complete within 1 hour
-**Tech:** EventBridge → Lambda → DynamoDB Scan → S3 → SageMaker
-**Output:** Fine-tuned model (if accuracy drops)
-
-### Pipeline 3: Metrics Collection
+### Pipeline 2: Metrics Collection
 **Trigger:** Every API request
 **Frequency:** Real-time
 **SLA:** <10ms overhead
@@ -1034,11 +981,13 @@ sequenceDiagram
         Lambda->>DB: Get Jordan's Events (tomorrow)
         DB-->>Lambda: [6pm-8pm Gym]
     and
-        Lambda->>DB: Get User Preferences (dinner)
-        DB-->>Lambda: {usualTime: 7pm, duration: 90min}
+        Lambda->>DB: Get User RlPreferences (time slots)
+        DB-->>Lambda: timeSlotPreferences with α/β counts for 168 slots
     end
 
     Lambda->>Lambda: Step 3: Calculate Mutual Availability<br/>User free: 5pm-11:59pm<br/>Jordan free: 9am-6pm, 8pm-11:59pm<br/>Mutual: 5-6pm, 8-11:59pm
+
+    Lambda->>Lambda: Step 3.5: Thompson Sampling<br/>Sample beliefs from Beta(α, β) for each slot<br/>Pick top 20 time slots with highest beliefs
 
     Note over Lambda,Bedrock: Lambda calls Bedrock SDK
     Lambda->>Bedrock: Step 4: InvokeModel()<br/>modelId: claude-haiku-4.5<br/>Enhanced Prompt:<br/>Input + Availability + Preferences<br/>"User wants dinner at 7pm usually,<br/>but Jordan has gym 6-8pm.<br/>Free windows: 5-6pm, 8-11:59pm"
@@ -1059,7 +1008,7 @@ graph TB
         S_INPUT["📝 Input:<br/>'coffee with Taylor 10am tomorrow'"]
         S_CHECK{Has exact<br/>time?}
         S_PARSE[🤖 Basic AI Parse:<br/>No DB queries]
-        S_OUTPUT["✅ Output:<br/>10am (as specified)<br/>Latency: 300ms<br/>Cost: $0.0002"]
+        S_OUTPUT["✅ Output:<br/>10am (as specified)<br/>Latency: 1.5-2s<br/>Cost: $0.0002"]
     end
 
     subgraph "Smart Parsing - Intelligent Path"
@@ -1068,7 +1017,7 @@ graph TB
         SM_FETCH[📊 Fetch Context:<br/>• User events<br/>• Jordan's events<br/>• Preferences]
         SM_CALC[🧮 Calculate:<br/>Mutual availability<br/>Free: 5-6pm, 8-11:59pm]
         SM_PARSE[🤖 Smart AI Parse:<br/>With context]
-        SM_OUTPUT["✅ Output:<br/>8pm suggested<br/>Avoids conflict ✓<br/>Latency: 850ms<br/>Cost: $0.0005"]
+        SM_OUTPUT["✅ Output:<br/>8pm suggested<br/>Avoids conflict ✓<br/>Latency: 2.5-4s<br/>Cost: $0.0005"]
     end
 
     S_INPUT --> S_CHECK
@@ -1091,7 +1040,7 @@ graph TB
 
 | Feature | Simple Parsing | Smart Parsing (Availability-Aware) |
 |---------|---------------|-----------------------------------|
-| **Latency** | <500ms | <1s |
+| **Latency** | 1.5-2s | 2.5-4s |
 | **DB Queries** | 0 | 2-5 (parallel) |
 | **AI Prompt** | Basic context | + Availability + Preferences |
 | **Output** | Time as-is | Conflict-free time + alternatives |
