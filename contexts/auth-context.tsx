@@ -119,6 +119,7 @@ interface AuthContextType {
   confirmSignup: (email: string, code: string) => Promise<AuthResult>;
   resendCode: (email: string) => Promise<AuthResult>;
   forgotPassword: (email: string) => Promise<AuthResult>;
+  resetPassword: (email: string, code: string, newPassword: string) => Promise<AuthResult>;
   logout: () => void;
 }
 
@@ -153,6 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const authDetails = new AuthenticationDetails({ Username: email, Password: password });
       const cognitoUser = new CognitoUser({ Username: email, Pool: getPool() });
+      cognitoUser.setAuthenticationFlowType('USER_PASSWORD_AUTH');
 
       return await new Promise<AuthResult>((resolve) => {
         cognitoUser.authenticateUser(authDetails, {
@@ -240,6 +242,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const resetPassword = useCallback(async (email: string, code: string, newPassword: string): Promise<AuthResult> => {
+    const cognitoUser = new CognitoUser({ Username: email, Pool: getPool() });
+    return new Promise<AuthResult>((resolve) => {
+      cognitoUser.confirmPassword(code, newPassword, {
+        onSuccess: () => resolve({ success: true }),
+        onFailure: (err) => resolve({ success: false, error: cognitoErrorMessage(err as { code?: string; message: string }) }),
+      });
+    });
+  }, []);
+
   const logout = useCallback(() => {
     const currentUser = getPool().getCurrentUser();
     if (currentUser) currentUser.signOut();
@@ -258,6 +270,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         confirmSignup,
         resendCode,
         forgotPassword,
+        resetPassword,
         logout,
       }}
     >

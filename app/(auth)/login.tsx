@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, View, ScrollView, Pressable, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, View, ScrollView, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
@@ -15,10 +15,12 @@ export default function LoginScreen() {
   const { login, isLoading } = useAuth();
   const textSecondary = useThemeColor({}, 'textSecondary');
   const borderColor = useThemeColor({}, 'border');
+  const dangerColor = useThemeColor({}, 'danger');
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState<string | null>(null);
 
   const handleLogin = async () => {
     const validationErrors = validateLoginForm(email, password);
@@ -29,13 +31,14 @@ export default function LoginScreen() {
       return;
     }
     setErrors({});
+    setFormError(null);
 
     const result = await login(email, password);
     if (!result.success) {
       if (result.pendingVerification) {
         router.push({ pathname: '/(auth)/verify' as never, params: { email } });
       } else {
-        Alert.alert('Login Failed', result.error);
+        setFormError(result.error ?? 'Login failed. Please try again.');
       }
     }
   };
@@ -63,6 +66,7 @@ export default function LoginScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              autoComplete="email"
               error={errors.email}
             />
           </FormField>
@@ -73,6 +77,8 @@ export default function LoginScreen() {
               onChangeText={setPassword}
               placeholder="Enter your password"
               secureTextEntry
+              autoComplete="off"
+              showToggle
               error={errors.password}
             />
           </FormField>
@@ -86,6 +92,12 @@ export default function LoginScreen() {
 
           <AuthButton title="Log In" onPress={handleLogin} loading={isLoading} />
 
+          {formError && (
+            <ThemedText style={[styles.formError, { color: dangerColor }]}>
+              {formError}
+            </ThemedText>
+          )}
+
           <View style={styles.divider}>
             <View style={[styles.dividerLine, { backgroundColor: borderColor }]} />
             <ThemedText style={[styles.dividerText, { color: textSecondary }]}>or</ThemedText>
@@ -95,7 +107,7 @@ export default function LoginScreen() {
           <AuthButton
             title="Continue with Google"
             variant="google"
-            onPress={() => Alert.alert('Google Sign-In', 'Google sign-in will be available soon.')}
+            onPress={() => setFormError('Google sign-in coming soon.')}
           />
 
           <View style={styles.footer}>
@@ -153,5 +165,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 32,
+  },
+  formError: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 12,
   },
 });

@@ -9,49 +9,86 @@ import { AuthButton } from '@/components/auth/auth-button';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/contexts/auth-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { validateEmail } from '@/utils/validation';
+import { validateEmail, validatePassword, validatePasswordMatch } from '@/utils/validation';
+
+type Step = 'email' | 'reset' | 'done';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
-  const { forgotPassword } = useAuth();
+  const { forgotPassword, resetPassword } = useAuth();
   const textSecondary = useThemeColor({}, 'textSecondary');
   const tintColor = useThemeColor({}, 'tint');
   const successColor = useThemeColor({}, 'success');
+  const dangerColor = useThemeColor({}, 'danger');
 
+  const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [sent, setSent] = useState(false);
+  const [code, setCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = async () => {
+  const handleSendCode = async () => {
     const emailError = validateEmail(email);
     if (emailError) {
-      setError(emailError);
+      setErrors({ email: emailError });
       return;
     }
-    setError(null);
+    setErrors({});
+    setFormError(null);
     setIsLoading(true);
-
     try {
       const result = await forgotPassword(email);
       if (result.success) {
-        setSent(true);
+        setStep('reset');
+      } else {
+        setFormError(result.error ?? 'Failed to send reset code. Please try again.');
       }
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (sent) {
+  const handleResetPassword = async () => {
+    const newErrors: Record<string, string> = {};
+    if (!code.trim()) newErrors.code = 'Reset code is required';
+    const passwordError = validatePassword(newPassword);
+    if (passwordError) newErrors.newPassword = passwordError;
+    const matchError = validatePasswordMatch(newPassword, confirmPassword);
+    if (matchError) newErrors.confirmPassword = matchError;
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+    setErrors({});
+    setFormError(null);
+    setIsLoading(true);
+    try {
+      const result = await resetPassword(email, code.trim(), newPassword);
+      if (result.success) {
+        setStep('done');
+      } else {
+        setFormError(result.error ?? 'Failed to reset password. Please try again.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ── Step 3: Success ───────────────────────────────────────────────────────
+  if (step === 'done') {
     return (
       <ThemedView style={styles.container}>
-        <View style={styles.successContent}>
+        <View style={styles.centeredContent}>
           <View style={[styles.successIcon, { backgroundColor: `${successColor}15` }]}>
             <IconSymbol name="checkmark.circle.fill" size={48} color={successColor} />
           </View>
-          <ThemedText type="title" style={styles.successTitle}>Check your email</ThemedText>
-          <ThemedText style={[styles.successMessage, { color: textSecondary }]}>
-            We've sent a password reset link to {email}. Check your inbox and follow the instructions.
+          <ThemedText type="title" style={styles.centeredTitle}>Password reset!</ThemedText>
+          <ThemedText style={[styles.centeredMessage, { color: textSecondary }]}>
+            Your password has been updated. You can now log in with your new password.
           </ThemedText>
           <AuthButton title="Back to Login" onPress={() => router.replace('/(auth)/login')} />
         </View>
@@ -67,7 +104,10 @@ export default function ForgotPasswordScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <Pressable
+            onPress={() => step === 'reset' ? setStep('email') : router.back()}
+            style={styles.backButton}
+          >
             <IconSymbol name="chevron.left" size={28} color={tintColor} />
           </Pressable>
           <ThemedText type="subtitle" style={styles.headerTitle}>
@@ -80,23 +120,85 @@ export default function ForgotPasswordScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          <ThemedText style={[styles.subtitle, { color: textSecondary }]}>
-            Enter your email address and we'll send you a link to reset your password.
-          </ThemedText>
+          {/* ── Step 1: Enter email ── */}
+          {step === 'email' && (
+            <>
+              <ThemedText style={[styles.subtitle, { color: textSecondary }]}>
+                Enter your email address and we'll send you a 6-digit reset code.
+              </ThemedText>
 
-          <FormField label="Email" required>
-            <AuthTextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="your.email@example.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              error={error}
-            />
-          </FormField>
+              <FormField label="Email" required>
+                <AuthTextInput
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="your.email@example.com"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  error={errors.email}
+                />
+              </FormField>
 
-          <AuthButton title="Send Reset Link" onPress={handleSubmit} loading={isLoading} />
+              <AuthButton title="Send Reset Code" onPress={handleSendCode} loading={isLoading} />
+
+              {formError && (
+                <ThemedText style={[styles.formError, { color: dangerColor }]}>
+                  {formError}
+                </ThemedText>
+              )}
+            </>
+          )}
+
+          {/* ── Step 2: Enter code + new password ── */}
+          {step === 'reset' && (
+            <>
+              <ThemedText style={[styles.subtitle, { color: textSecondary }]}>
+                Enter the 6-digit code sent to {email} and choose a new password.
+              </ThemedText>
+
+              <FormField label="Reset Code" required>
+                <AuthTextInput
+                  value={code}
+                  onChangeText={setCode}
+                  placeholder="6-digit code"
+                  keyboardType="number-pad"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  error={errors.code}
+                />
+              </FormField>
+
+              <FormField label="New Password" required>
+                <AuthTextInput
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  placeholder="8+ chars, uppercase, number, symbol"
+                  secureTextEntry
+                  autoComplete="new-password"
+                  error={errors.newPassword}
+                />
+              </FormField>
+
+              <FormField label="Confirm New Password" required>
+                <AuthTextInput
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder="Re-enter your new password"
+                  secureTextEntry
+                  autoComplete="new-password"
+                  error={errors.confirmPassword}
+                />
+              </FormField>
+
+              <AuthButton title="Reset Password" onPress={handleResetPassword} loading={isLoading} />
+
+              {formError && (
+                <ThemedText style={[styles.formError, { color: dangerColor }]}>
+                  {formError}
+                </ThemedText>
+              )}
+            </>
+          )}
 
           <View style={styles.footer}>
             <ThemedText style={{ color: textSecondary }}>
@@ -150,7 +252,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 32,
   },
-  successContent: {
+  formError: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 12,
+  },
+  centeredContent: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -164,11 +271,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 24,
   },
-  successTitle: {
+  centeredTitle: {
     marginBottom: 12,
     textAlign: 'center',
   },
-  successMessage: {
+  centeredMessage: {
     fontSize: 16,
     lineHeight: 24,
     textAlign: 'center',

@@ -34,9 +34,8 @@ export function validatePasswordMatch(password: string, confirmPassword: string)
 export function validateLoginForm(email: string, password: string): ValidationError[] {
   const errors: ValidationError[] = [];
   const emailError = validateEmail(email);
-  const passwordError = validatePassword(password);
   if (emailError) errors.push({ field: 'email', message: emailError });
-  if (passwordError) errors.push({ field: 'password', message: passwordError });
+  if (!password) errors.push({ field: 'password', message: 'Password is required' });
   return errors;
 }
 
