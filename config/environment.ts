@@ -15,7 +15,7 @@ const extra = Constants.expoConfig?.extra || {};
 const env: Environment = {
   appEnv: extra.appEnv || 'development',
   awsRegion: 'ca-central-1', // Hardcoded - all resources in ca-central-1
-  enableDebugLogging: extra.enableDebugLogging ?? true,
+  enableDebugLogging: extra.enableDebugLogging ?? false,
 };
 
 /**

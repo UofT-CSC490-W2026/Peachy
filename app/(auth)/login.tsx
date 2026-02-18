@@ -1,14 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, ScrollView, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { FormField } from '@/components/form/form-field';
-import { AuthTextInput } from '@/components/auth/auth-text-input';
+import { FormTextInput } from '@/components/form/form-text-input';
 import { AuthButton } from '@/components/auth/auth-button';
 import { useAuth } from '@/contexts/auth-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { validateLoginForm } from '@/utils/validation';
+
+// Lock durations by attempt count (seconds)
+const LOCK_DURATIONS: Record<number, number> = { 3: 30, 4: 60, 5: 120 };
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -22,7 +25,36 @@ export default function LoginScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Rate limiting state
+  const [loginAttempts, setLoginAttempts] = useState(0);
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const [countdown, setCountdown] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (lockedUntil === null) return;
+
+    const tick = () => {
+      const remaining = Math.ceil((lockedUntil - Date.now()) / 1000);
+      if (remaining <= 0) {
+        setCountdown(0);
+        setLockedUntil(null);
+        if (timerRef.current) clearInterval(timerRef.current);
+      } else {
+        setCountdown(remaining);
+      }
+    };
+
+    tick();
+    timerRef.current = setInterval(tick, 1000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [lockedUntil]);
+
+  const isLocked = lockedUntil !== null && Date.now() < lockedUntil;
+
   const handleLogin = async () => {
+    if (isLocked) return;
+
     const validationErrors = validateLoginForm(email, password);
     if (validationErrors.length > 0) {
       const errorMap: Record<string, string> = {};
@@ -38,8 +70,17 @@ export default function LoginScreen() {
       if (result.pendingVerification) {
         router.push({ pathname: '/(auth)/verify' as never, params: { email } });
       } else {
+        const newAttempts = loginAttempts + 1;
+        setLoginAttempts(newAttempts);
+        const lockSeconds = LOCK_DURATIONS[newAttempts] ?? (newAttempts > 5 ? 120 : null);
+        if (lockSeconds) {
+          setLockedUntil(Date.now() + lockSeconds * 1000);
+        }
         setFormError(result.error ?? 'Login failed. Please try again.');
       }
+    } else {
+      setLoginAttempts(0);
+      setLockedUntil(null);
     }
   };
 
@@ -59,7 +100,7 @@ export default function LoginScreen() {
           </ThemedText>
 
           <FormField label="Email" required>
-            <AuthTextInput
+            <FormTextInput
               value={email}
               onChangeText={setEmail}
               placeholder="your.email@example.com"
@@ -72,7 +113,7 @@ export default function LoginScreen() {
           </FormField>
 
           <FormField label="Password" required>
-            <AuthTextInput
+            <FormTextInput
               value={password}
               onChangeText={setPassword}
               placeholder="Enter your password"
@@ -90,7 +131,11 @@ export default function LoginScreen() {
             <ThemedText type="link">Forgot password?</ThemedText>
           </Pressable>
 
-          <AuthButton title="Log In" onPress={handleLogin} loading={isLoading} />
+          <AuthButton
+            title={isLocked ? `Try again in ${countdown}s` : 'Log In'}
+            onPress={handleLogin}
+            loading={isLoading && !isLocked}
+          />
 
           {formError && (
             <ThemedText style={[styles.formError, { color: dangerColor }]}>

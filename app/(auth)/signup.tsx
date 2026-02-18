@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { FormField } from '@/components/form/form-field';
-import { AuthTextInput } from '@/components/auth/auth-text-input';
+import { FormTextInput } from '@/components/form/form-text-input';
 import { AuthButton } from '@/components/auth/auth-button';
 import { useAuth } from '@/contexts/auth-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -59,7 +59,7 @@ export default function SignupScreen() {
           </ThemedText>
 
           <FormField label="Name" required>
-            <AuthTextInput
+            <FormTextInput
               value={name}
               onChangeText={setName}
               placeholder="Your full name"
@@ -69,7 +69,7 @@ export default function SignupScreen() {
           </FormField>
 
           <FormField label="Email" required>
-            <AuthTextInput
+            <FormTextInput
               value={email}
               onChangeText={setEmail}
               placeholder="your.email@example.com"
@@ -81,23 +81,25 @@ export default function SignupScreen() {
           </FormField>
 
           <FormField label="Password" required>
-            <AuthTextInput
+            <FormTextInput
               value={password}
               onChangeText={setPassword}
               placeholder="8+ chars, uppercase, number, symbol"
               secureTextEntry
               autoComplete="new-password"
+              showToggle
               error={errors.password}
             />
           </FormField>
 
           <FormField label="Confirm Password" required>
-            <AuthTextInput
+            <FormTextInput
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               placeholder="Re-enter your password"
               secureTextEntry
               autoComplete="new-password"
+              showToggle
               error={errors.confirmPassword}
             />
           </FormField>

@@ -1,14 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, ScrollView, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { FormField } from '@/components/form/form-field';
-import { AuthTextInput } from '@/components/auth/auth-text-input';
+import { FormTextInput } from '@/components/form/form-text-input';
 import { AuthButton } from '@/components/auth/auth-button';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/contexts/auth-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { validateResetCode } from '@/utils/validation';
+
+const RESEND_COOLDOWN = 60; // seconds
 
 export default function VerifyScreen() {
   const router = useRouter();
@@ -23,9 +26,34 @@ export default function VerifyScreen() {
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [verified, setVerified] = useState(false);
 
+  // Resend cooldown
+  const [resendCooldownUntil, setResendCooldownUntil] = useState<number | null>(null);
+  const [resendCountdown, setResendCountdown] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (resendCooldownUntil === null) return;
+    const tick = () => {
+      const remaining = Math.ceil((resendCooldownUntil - Date.now()) / 1000);
+      if (remaining <= 0) {
+        setResendCountdown(0);
+        setResendCooldownUntil(null);
+        if (timerRef.current) clearInterval(timerRef.current);
+      } else {
+        setResendCountdown(remaining);
+      }
+    };
+    tick();
+    timerRef.current = setInterval(tick, 1000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [resendCooldownUntil]);
+
+  const isResendLocked = resendCooldownUntil !== null && Date.now() < resendCooldownUntil;
+
   const handleVerify = async () => {
-    if (!code.trim()) {
-      setError('Please enter the verification code');
+    const codeError = validateResetCode(code);
+    if (codeError) {
+      setError(codeError);
       return;
     }
     setError(null);
@@ -40,10 +68,12 @@ export default function VerifyScreen() {
   };
 
   const handleResend = async () => {
+    if (isResendLocked) return;
     setError(null);
     setResendMessage(null);
     const result = await resendCode(email ?? '');
     if (result.success) {
+      setResendCooldownUntil(Date.now() + RESEND_COOLDOWN * 1000);
       setResendMessage('A new code has been sent to your email');
     } else {
       setError(result.error ?? 'Failed to resend code');
@@ -95,7 +125,7 @@ export default function VerifyScreen() {
           </ThemedText>
 
           <FormField label="Verification Code" required>
-            <AuthTextInput
+            <FormTextInput
               value={code}
               onChangeText={setCode}
               placeholder="123456"
@@ -118,8 +148,10 @@ export default function VerifyScreen() {
             <ThemedText style={{ color: textSecondary }}>
               Didn't receive a code?{' '}
             </ThemedText>
-            <Pressable onPress={handleResend}>
-              <ThemedText type="link">Resend</ThemedText>
+            <Pressable onPress={handleResend} disabled={isResendLocked}>
+              <ThemedText type="link">
+                {isResendLocked ? `Resend in ${resendCountdown}s` : 'Resend'}
+              </ThemedText>
             </Pressable>
           </View>
         </ScrollView>

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { Platform } from 'react-native';
 import {
   CognitoUserPool,
   CognitoUser,
@@ -7,47 +8,90 @@ import {
   type CognitoUserSession,
 } from 'amazon-cognito-identity-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
 import { User } from '@/types';
 
 // ─── Cognito Storage Adapter ──────────────────────────────────────────────────
 // The Cognito SDK requires a synchronous storage interface. We satisfy this
-// with an in-memory store that is mirrored to AsyncStorage asynchronously,
-// giving us session persistence across app restarts.
+// with an in-memory store that is mirrored to AsyncStorage (non-sensitive data)
+// and SecureStore (tokens) asynchronously, giving us session persistence and
+// encrypted token storage on native platforms.
 const STORAGE_PREFIX = '@peachy:cognito:';
+const SECURE_KEYS_INDEX = '@peachy:secure_keys_index';
+
+// Key suffixes that Cognito stores as long-lived auth tokens
+const TOKEN_SUFFIXES = ['idToken', 'accessToken', 'refreshToken', 'clockDrift'];
+
+function isTokenKey(key: string): boolean {
+  return TOKEN_SUFFIXES.some(suffix => key.endsWith('.' + suffix));
+}
+
 const memStore: Record<string, string> = {};
+// Tracks which keys are persisted in SecureStore (vs AsyncStorage)
+const secureKeySet = new Set<string>();
 
 const cognitoStorage = {
   setItem: (key: string, value: string) => {
     memStore[key] = value;
-    AsyncStorage.setItem(STORAGE_PREFIX + key, value).catch(() => {});
+    if (Platform.OS !== 'web' && isTokenKey(key)) {
+      secureKeySet.add(key);
+      SecureStore.setItemAsync(STORAGE_PREFIX + key, value).catch(() => {});
+      // Keep an index of secure keys so hydrateStorage can find them
+      AsyncStorage.setItem(SECURE_KEYS_INDEX, JSON.stringify([...secureKeySet])).catch(() => {});
+    } else {
+      AsyncStorage.setItem(STORAGE_PREFIX + key, value).catch(() => {});
+    }
     return value;
   },
   getItem: (key: string) => memStore[key] ?? null,
   removeItem: (key: string) => {
     delete memStore[key];
-    AsyncStorage.removeItem(STORAGE_PREFIX + key).catch(() => {});
+    if (Platform.OS !== 'web' && secureKeySet.has(key)) {
+      secureKeySet.delete(key);
+      SecureStore.deleteItemAsync(STORAGE_PREFIX + key).catch(() => {});
+      AsyncStorage.setItem(SECURE_KEYS_INDEX, JSON.stringify([...secureKeySet])).catch(() => {});
+    } else {
+      AsyncStorage.removeItem(STORAGE_PREFIX + key).catch(() => {});
+    }
   },
   clear: () => {
-    const keys = Object.keys(memStore);
-    keys.forEach(k => delete memStore[k]);
-    AsyncStorage.multiRemove(keys.map(k => STORAGE_PREFIX + k)).catch(() => {});
+    const asyncKeys = Object.keys(memStore).filter(k => !secureKeySet.has(k));
+    secureKeySet.forEach(k => SecureStore.deleteItemAsync(STORAGE_PREFIX + k).catch(() => {}));
+    secureKeySet.clear();
+    Object.keys(memStore).forEach(k => delete memStore[k]);
+    AsyncStorage.multiRemove([SECURE_KEYS_INDEX, ...asyncKeys.map(k => STORAGE_PREFIX + k)]).catch(() => {});
   },
 };
 
-// Load all Cognito tokens from AsyncStorage into the memory store.
+// Load all Cognito tokens from AsyncStorage/SecureStore into the memory store.
 // Must be called before accessing the user pool on app start.
 async function hydrateStorage() {
   try {
+    // Load non-token data (e.g. LastAuthUser) from AsyncStorage
     const allKeys = await AsyncStorage.getAllKeys();
     const cognitoKeys = allKeys.filter(k => k.startsWith(STORAGE_PREFIX));
-    if (cognitoKeys.length === 0) return;
-    const pairs = await AsyncStorage.multiGet(cognitoKeys);
-    pairs.forEach(([key, value]) => {
-      if (value !== null) {
-        memStore[key.slice(STORAGE_PREFIX.length)] = value;
+    if (cognitoKeys.length > 0) {
+      const pairs = await AsyncStorage.multiGet(cognitoKeys);
+      pairs.forEach(([key, value]) => {
+        if (value !== null) {
+          memStore[key.slice(STORAGE_PREFIX.length)] = value;
+        }
+      });
+    }
+
+    // On native, load tokens from SecureStore using the stored index
+    if (Platform.OS !== 'web') {
+      const indexStr = await AsyncStorage.getItem(SECURE_KEYS_INDEX);
+      if (indexStr) {
+        const storedKeys: string[] = JSON.parse(indexStr);
+        await Promise.all(storedKeys.map(async (key) => {
+          secureKeySet.add(key);
+          const value = await SecureStore.getItemAsync(STORAGE_PREFIX + key);
+          if (value !== null) memStore[key] = value;
+        }));
       }
-    });
+    }
   } catch {}
 }
 
@@ -67,21 +111,21 @@ function getPool(): CognitoUserPool {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function userFromSession(session: CognitoUserSession): User {
-  const claims = session.getIdToken().payload as Record<string, string>;
+  const claims = session.getIdToken().payload as Record<string, string | number>;
   return {
-    id: claims.sub,
-    name: claims.name ?? claims.given_name ?? claims.email,
-    username: claims['cognito:username'] ?? claims.email,
-    email: claims.email,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    id: claims.sub as string,
+    name: (claims.name ?? claims.given_name ?? claims.email) as string,
+    username: (claims['cognito:username'] ?? claims.email) as string,
+    email: claims.email as string,
+    // Use the token issue time as a stable createdAt approximation
+    createdAt: new Date(Number(claims.iat) * 1000).toISOString(),
+    updatedAt: new Date(Number(claims.iat) * 1000).toISOString(),
   };
 }
 
 function cognitoErrorMessage(err: { code?: string; message: string }): string {
   switch (err.code) {
     case 'UserNotFoundException':
-      return 'No account found with that email';
     case 'NotAuthorizedException':
       return 'Incorrect email or password';
     case 'UserNotConfirmedException':
@@ -131,7 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isRestoring, setIsRestoring] = useState(true);
 
-  // Restore Cognito session from AsyncStorage on mount
+  // Restore Cognito session from storage on mount
   useEffect(() => {
     hydrateStorage().then(() => {
       const pool = getPool();
@@ -170,7 +214,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
           },
           newPasswordRequired: () => {
-            resolve({ success: false, error: 'Password reset required. Please contact support.' });
+            resolve({
+              success: false,
+              error: 'Your account requires a new password. Please use "Forgot Password" to reset it.',
+            });
           },
         });
       });
@@ -237,7 +284,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return new Promise<AuthResult>((resolve) => {
       cognitoUser.forgotPassword({
         onSuccess: () => resolve({ success: true }),
-        onFailure: (err) => resolve({ success: false, error: cognitoErrorMessage(err as { code?: string; message: string }) }),
+        onFailure: (err) => {
+          // Always return success for UserNotFoundException to prevent account enumeration
+          if ((err as { code?: string }).code === 'UserNotFoundException') {
+            resolve({ success: true });
+            return;
+          }
+          resolve({ success: false, error: cognitoErrorMessage(err as { code?: string; message: string }) });
+        },
       });
     });
   }, []);
@@ -254,8 +308,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     const currentUser = getPool().getCurrentUser();
-    if (currentUser) currentUser.signOut();
+    // Clear local state immediately
+    cognitoStorage.clear();
     setUser(null);
+    // Revoke all tokens server-side (invalidates all devices)
+    if (currentUser) {
+      currentUser.globalSignOut({
+        onSuccess: () => {},
+        onFailure: () => {},
+      });
+    }
   }, []);
 
   return (

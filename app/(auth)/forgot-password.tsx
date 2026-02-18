@@ -1,15 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, ScrollView, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { FormField } from '@/components/form/form-field';
-import { AuthTextInput } from '@/components/auth/auth-text-input';
+import { FormTextInput } from '@/components/form/form-text-input';
 import { AuthButton } from '@/components/auth/auth-button';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/contexts/auth-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { validateEmail, validatePassword, validatePasswordMatch } from '@/utils/validation';
+import { validateEmail, validatePassword, validatePasswordMatch, validateResetCode } from '@/utils/validation';
+
+const SEND_CODE_COOLDOWN = 60; // seconds
 
 type Step = 'email' | 'reset' | 'done';
 
@@ -30,7 +32,32 @@ export default function ForgotPasswordScreen() {
   const [formError, setFormError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Cooldown for "Send Reset Code"
+  const [sendCooldownUntil, setSendCooldownUntil] = useState<number | null>(null);
+  const [sendCountdown, setSendCountdown] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (sendCooldownUntil === null) return;
+    const tick = () => {
+      const remaining = Math.ceil((sendCooldownUntil - Date.now()) / 1000);
+      if (remaining <= 0) {
+        setSendCountdown(0);
+        setSendCooldownUntil(null);
+        if (timerRef.current) clearInterval(timerRef.current);
+      } else {
+        setSendCountdown(remaining);
+      }
+    };
+    tick();
+    timerRef.current = setInterval(tick, 1000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [sendCooldownUntil]);
+
+  const isSendLocked = sendCooldownUntil !== null && Date.now() < sendCooldownUntil;
+
   const handleSendCode = async () => {
+    if (isSendLocked) return;
     const emailError = validateEmail(email);
     if (emailError) {
       setErrors({ email: emailError });
@@ -42,6 +69,7 @@ export default function ForgotPasswordScreen() {
     try {
       const result = await forgotPassword(email);
       if (result.success) {
+        setSendCooldownUntil(Date.now() + SEND_CODE_COOLDOWN * 1000);
         setStep('reset');
       } else {
         setFormError(result.error ?? 'Failed to send reset code. Please try again.');
@@ -53,7 +81,8 @@ export default function ForgotPasswordScreen() {
 
   const handleResetPassword = async () => {
     const newErrors: Record<string, string> = {};
-    if (!code.trim()) newErrors.code = 'Reset code is required';
+    const codeError = validateResetCode(code);
+    if (codeError) newErrors.code = codeError;
     const passwordError = validatePassword(newPassword);
     if (passwordError) newErrors.newPassword = passwordError;
     const matchError = validatePasswordMatch(newPassword, confirmPassword);
@@ -128,7 +157,7 @@ export default function ForgotPasswordScreen() {
               </ThemedText>
 
               <FormField label="Email" required>
-                <AuthTextInput
+                <FormTextInput
                   value={email}
                   onChangeText={setEmail}
                   placeholder="your.email@example.com"
@@ -139,7 +168,11 @@ export default function ForgotPasswordScreen() {
                 />
               </FormField>
 
-              <AuthButton title="Send Reset Code" onPress={handleSendCode} loading={isLoading} />
+              <AuthButton
+                title={isSendLocked ? `Resend in ${sendCountdown}s` : 'Send Reset Code'}
+                onPress={handleSendCode}
+                loading={isLoading && !isSendLocked}
+              />
 
               {formError && (
                 <ThemedText style={[styles.formError, { color: dangerColor }]}>
@@ -157,7 +190,7 @@ export default function ForgotPasswordScreen() {
               </ThemedText>
 
               <FormField label="Reset Code" required>
-                <AuthTextInput
+                <FormTextInput
                   value={code}
                   onChangeText={setCode}
                   placeholder="6-digit code"
@@ -169,23 +202,25 @@ export default function ForgotPasswordScreen() {
               </FormField>
 
               <FormField label="New Password" required>
-                <AuthTextInput
+                <FormTextInput
                   value={newPassword}
                   onChangeText={setNewPassword}
                   placeholder="8+ chars, uppercase, number, symbol"
                   secureTextEntry
                   autoComplete="new-password"
+                  showToggle
                   error={errors.newPassword}
                 />
               </FormField>
 
               <FormField label="Confirm New Password" required>
-                <AuthTextInput
+                <FormTextInput
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
                   placeholder="Re-enter your new password"
                   secureTextEntry
                   autoComplete="new-password"
+                  showToggle
                   error={errors.confirmPassword}
                 />
               </FormField>
