@@ -4,6 +4,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useAuth } from '@/contexts/auth-context';
 import { currentUser } from '@/data/mock-data';
 
 interface SettingItemProps {
@@ -49,6 +50,7 @@ export default function ProfileScreen() {
   const borderColor = useThemeColor({}, 'border');
   const textSecondary = useThemeColor({}, 'textSecondary');
   const tintColor = useThemeColor({}, 'tint');
+  const { logout } = useAuth();
 
   const handleEditProfile = () => {
     router.push('/profile-edit');
@@ -80,9 +82,7 @@ export default function ProfileScreen() {
       'Are you sure you want to log out?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Log Out', style: 'destructive', onPress: () => {
-          Alert.alert('Logged Out', 'Feature coming soon');
-        }},
+        { text: 'Log Out', style: 'destructive', onPress: () => logout() },
       ]
     );
   };
