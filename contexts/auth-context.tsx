@@ -307,17 +307,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    const currentUser = getPool().getCurrentUser();
-    // Clear local state immediately
+    // signOut() clears the Cognito SDK's in-memory session without making
+    // any network call, so it can't fail. We then clear our storage and
+    // drop the user from state to redirect to auth screens immediately.
+    getPool().getCurrentUser()?.signOut();
     cognitoStorage.clear();
     setUser(null);
-    // Revoke all tokens server-side (invalidates all devices)
-    if (currentUser) {
-      currentUser.globalSignOut({
-        onSuccess: () => {},
-        onFailure: () => {},
-      });
-    }
   }, []);
 
   return (

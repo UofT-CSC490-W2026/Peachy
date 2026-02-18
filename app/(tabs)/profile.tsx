@@ -1,11 +1,10 @@
-import { StyleSheet, View, ScrollView, Pressable, Alert } from 'react-native';
+import { StyleSheet, View, ScrollView, Pressable, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useAuth } from '@/contexts/auth-context';
-import { currentUser } from '@/data/mock-data';
 
 interface SettingItemProps {
   icon: string;
@@ -50,7 +49,7 @@ export default function ProfileScreen() {
   const borderColor = useThemeColor({}, 'border');
   const textSecondary = useThemeColor({}, 'textSecondary');
   const tintColor = useThemeColor({}, 'tint');
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
 
   const handleEditProfile = () => {
     router.push('/profile-edit');
@@ -77,14 +76,15 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert(
-      'Log Out',
-      'Are you sure you want to log out?',
-      [
+    if (Platform.OS === 'web') {
+      // Alert.alert with custom buttons is unreliable on web
+      if (window.confirm('Are you sure you want to log out?')) logout();
+    } else {
+      Alert.alert('Log Out', 'Are you sure you want to log out?', [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Log Out', style: 'destructive', onPress: () => logout() },
-      ]
-    );
+      ]);
+    }
   };
 
   return (
@@ -96,14 +96,14 @@ export default function ProfileScreen() {
         {/* User Info */}
         <View style={styles.userSection}>
           <View style={[styles.avatarPlaceholder, { backgroundColor: surfaceColor, borderColor }]}>
-            <ThemedText type="title">{currentUser.name.charAt(0)}</ThemedText>
+            <ThemedText type="title">{user?.name?.charAt(0) ?? '?'}</ThemedText>
           </View>
-          <ThemedText type="subtitle" style={styles.name}>{currentUser.name}</ThemedText>
+          <ThemedText type="subtitle" style={styles.name}>{user?.name}</ThemedText>
           <ThemedText lightColor="#687076" darkColor="#9BA1A6" style={styles.username}>
-            @{currentUser.username}
+            @{user?.username}
           </ThemedText>
           <ThemedText lightColor="#687076" darkColor="#9BA1A6" style={styles.email}>
-            {currentUser.email}
+            {user?.email}
           </ThemedText>
           <Pressable
             style={[styles.editButton, { backgroundColor: tintColor }]}
