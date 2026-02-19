@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, ScrollView, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { FormField } from '@/components/form/form-field';
@@ -42,6 +43,19 @@ export default function VerifyScreen() {
     }
   }, [email, router]);
 
+  // Clear transient email when the screen loses focus after verification, so that
+  // any subsequent navigation to this screen (via back gesture, deep link, etc.)
+  // correctly triggers the guard and redirects to signup.
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        if (verified) {
+          setPendingVerificationEmail(null);
+        }
+      };
+    }, [verified, setPendingVerificationEmail])
+  );
+
   const isResendLocked = resendCooldownUntil !== null && Date.now() < resendCooldownUntil;
 
   const handleVerify = async () => {
@@ -55,8 +69,6 @@ export default function VerifyScreen() {
 
     const result = await confirmSignup(email ?? '', code.trim());
     if (result.success) {
-      // Clear the transient email now that verification is complete.
-      setPendingVerificationEmail(null);
       setVerified(true);
     } else {
       setError(result.error ?? 'Verification failed');
@@ -87,7 +99,13 @@ export default function VerifyScreen() {
           <ThemedText style={[styles.successMessage, { color: textSecondary }]}>
             Your account is ready. Log in to get started.
           </ThemedText>
-          <AuthButton title="Log In" onPress={() => router.replace('/(auth)/login')} />
+          <AuthButton
+            title="Log In"
+            onPress={() => {
+              setPendingVerificationEmail(null);
+              router.replace('/(auth)/login');
+            }}
+          />
         </View>
       </ThemedView>
     );
