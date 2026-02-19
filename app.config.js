@@ -34,6 +34,8 @@ export default {
     },
     plugins: [
       'expo-router',
+      'expo-secure-store',
+      'expo-web-browser',
       [
         'expo-splash-screen',
         {
@@ -54,10 +56,9 @@ export default {
     extra: {
       appEnv: process.env.APP_ENV || 'development',
       enableDebugLogging: IS_DEV,
-      // Add backend environment variables here when AWS infrastructure is ready
-      // apiUrl: process.env.API_URL,
-      // cognitoUserPoolId: process.env.COGNITO_USER_POOL_ID,
-      // cognitoClientId: process.env.COGNITO_CLIENT_ID,
+      apiUrl: process.env.API_URL,
+      cognitoUserPoolId: process.env.COGNITO_USER_POOL_ID,
+      cognitoClientId: process.env.COGNITO_CLIENT_ID,
       eas: {
         projectId: process.env.EAS_PROJECT_ID,
       },
