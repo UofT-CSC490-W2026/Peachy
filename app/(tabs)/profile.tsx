@@ -165,9 +165,12 @@ export default function ProfileScreen() {
         </View>
 
         {/* Log Out */}
+        {/* C4: accessibilityLabel and role make this button visible to screen readers */}
         <Pressable
           style={[styles.logoutButton, { borderColor }]}
           onPress={handleLogout}
+          accessibilityLabel="Log out from your account"
+          accessibilityRole="button"
         >
           <ThemedText style={styles.logoutText}>Log Out</ThemedText>
         </Pressable>

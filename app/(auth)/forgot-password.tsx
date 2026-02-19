@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { StyleSheet, View, ScrollView, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
@@ -9,9 +9,9 @@ import { AuthButton } from '@/components/auth/auth-button';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/contexts/auth-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useCountdown } from '@/hooks/use-countdown';
 import { validateEmail, validatePassword, validatePasswordMatch, validateResetCode } from '@/utils/validation';
-
-const SEND_CODE_COOLDOWN = 60; // seconds
+import { AUTH_CONSTANTS } from '@/constants/auth';
 
 type Step = 'email' | 'reset' | 'done';
 
@@ -33,26 +33,11 @@ export default function ForgotPasswordScreen() {
   const [isLoading, setIsLoading] = useState(false);
 
   // Cooldown for "Send Reset Code"
+  // C1: Shared countdown hook replaces the duplicated useEffect+setInterval block.
+  // C2: The hook also correctly nullifies the interval ref on cleanup, preventing
+  //     duplicate intervals when stepping back from 'reset' to 'email'.
   const [sendCooldownUntil, setSendCooldownUntil] = useState<number | null>(null);
-  const [sendCountdown, setSendCountdown] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (sendCooldownUntil === null) return;
-    const tick = () => {
-      const remaining = Math.ceil((sendCooldownUntil - Date.now()) / 1000);
-      if (remaining <= 0) {
-        setSendCountdown(0);
-        setSendCooldownUntil(null);
-        if (timerRef.current) clearInterval(timerRef.current);
-      } else {
-        setSendCountdown(remaining);
-      }
-    };
-    tick();
-    timerRef.current = setInterval(tick, 1000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [sendCooldownUntil]);
+  const sendCountdown = useCountdown(sendCooldownUntil);
 
   const isSendLocked = sendCooldownUntil !== null && Date.now() < sendCooldownUntil;
 
@@ -69,7 +54,7 @@ export default function ForgotPasswordScreen() {
     try {
       const result = await forgotPassword(email);
       if (result.success) {
-        setSendCooldownUntil(Date.now() + SEND_CODE_COOLDOWN * 1000);
+        setSendCooldownUntil(Date.now() + AUTH_CONSTANTS.FORGOT_PASSWORD_SEND_COOLDOWN_SECONDS * 1000);
         setStep('reset');
       } else {
         setFormError(result.error ?? 'Failed to send reset code. Please try again.');
@@ -133,9 +118,12 @@ export default function ForgotPasswordScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
+          {/* C4: Accessibility label and role for screen readers */}
           <Pressable
             onPress={() => step === 'reset' ? setStep('email') : router.back()}
             style={styles.backButton}
+            accessibilityLabel="Go back"
+            accessibilityRole="button"
           >
             <IconSymbol name="chevron.left" size={28} color={tintColor} />
           </Pressable>
@@ -153,7 +141,7 @@ export default function ForgotPasswordScreen() {
           {step === 'email' && (
             <>
               <ThemedText style={[styles.subtitle, { color: textSecondary }]}>
-                Enter your email address and we'll send you a 6-digit reset code.
+                {"Enter your email address and we'll send you a 6-digit reset code."}
               </ThemedText>
 
               <FormField label="Email" required>

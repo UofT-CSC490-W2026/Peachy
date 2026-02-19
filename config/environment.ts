@@ -19,8 +19,11 @@ const env: Environment = {
 };
 
 /**
- * Helper to log only in development
- * Usage: devLog('User created event:', event)
+ * Helper to log only in development.
+ * Usage: devLog('User created event:', event.id)
+ *
+ * S15: Do NOT pass user objects, tokens, credentials, email addresses, or any
+ * other PII to devLog — build logs may be captured and shared unintentionally.
  */
 export const devLog = (...args: any[]) => {
   if (env.enableDebugLogging) {

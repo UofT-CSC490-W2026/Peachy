@@ -3,17 +3,19 @@ import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { AuthButton } from '@/components/auth/auth-button';
-import { IconSymbol } from '@/components/ui/icon-symbol';
+import { IconSymbol, type IconSymbolName } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
-function FeatureItem({ icon, text }: { icon: string; text: string }) {
+// C3: Prop typed as IconSymbolName so the icon name is checked at compile-time
+// instead of silently cast with `as any`.
+function FeatureItem({ icon, text }: { icon: IconSymbolName; text: string }) {
   const tintColor = useThemeColor({}, 'tint');
   const textSecondary = useThemeColor({}, 'textSecondary');
 
   return (
     <View style={styles.featureItem}>
       <View style={[styles.featureIcon, { backgroundColor: `${tintColor}15` }]}>
-        <IconSymbol name={icon as any} size={20} color={tintColor} />
+        <IconSymbol name={icon} size={20} color={tintColor} />
       </View>
       <ThemedText style={[styles.featureText, { color: textSecondary }]}>
         {text}

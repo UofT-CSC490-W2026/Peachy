@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { StyleSheet, View, ScrollView, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { FormField } from '@/components/form/form-field';
@@ -9,17 +9,20 @@ import { AuthButton } from '@/components/auth/auth-button';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/contexts/auth-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useCountdown } from '@/hooks/use-countdown';
 import { validateResetCode } from '@/utils/validation';
-
-const RESEND_COOLDOWN = 60; // seconds
+import { AUTH_CONSTANTS } from '@/constants/auth';
 
 export default function VerifyScreen() {
   const router = useRouter();
-  const { email } = useLocalSearchParams<{ email: string }>();
-  const { confirmSignup, resendCode, isLoading } = useAuth();
+  // S10: Email is read from AuthContext (set by the signup flow) rather than
+  // URL params to avoid PII appearing in system logs and browser history.
+  const { confirmSignup, resendCode, isLoading, pendingVerificationEmail, setPendingVerificationEmail } = useAuth();
   const textSecondary = useThemeColor({}, 'textSecondary');
   const tintColor = useThemeColor({}, 'tint');
   const successColor = useThemeColor({}, 'success');
+
+  const email = pendingVerificationEmail;
 
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -28,25 +31,16 @@ export default function VerifyScreen() {
 
   // Resend cooldown
   const [resendCooldownUntil, setResendCooldownUntil] = useState<number | null>(null);
-  const [resendCountdown, setResendCountdown] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // C1: Shared countdown hook replaces the duplicated useEffect+setInterval block.
+  const resendCountdown = useCountdown(resendCooldownUntil);
 
+  // S8: Guard against arriving here without a pending verification email
+  // (e.g. direct deep-link or stale navigation state). Redirect to signup.
   useEffect(() => {
-    if (resendCooldownUntil === null) return;
-    const tick = () => {
-      const remaining = Math.ceil((resendCooldownUntil - Date.now()) / 1000);
-      if (remaining <= 0) {
-        setResendCountdown(0);
-        setResendCooldownUntil(null);
-        if (timerRef.current) clearInterval(timerRef.current);
-      } else {
-        setResendCountdown(remaining);
-      }
-    };
-    tick();
-    timerRef.current = setInterval(tick, 1000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [resendCooldownUntil]);
+    if (!email) {
+      router.replace('/(auth)/signup');
+    }
+  }, [email, router]);
 
   const isResendLocked = resendCooldownUntil !== null && Date.now() < resendCooldownUntil;
 
@@ -61,6 +55,8 @@ export default function VerifyScreen() {
 
     const result = await confirmSignup(email ?? '', code.trim());
     if (result.success) {
+      // Clear the transient email now that verification is complete.
+      setPendingVerificationEmail(null);
       setVerified(true);
     } else {
       setError(result.error ?? 'Verification failed');
@@ -73,7 +69,7 @@ export default function VerifyScreen() {
     setResendMessage(null);
     const result = await resendCode(email ?? '');
     if (result.success) {
-      setResendCooldownUntil(Date.now() + RESEND_COOLDOWN * 1000);
+      setResendCooldownUntil(Date.now() + AUTH_CONSTANTS.VERIFY_RESEND_COOLDOWN_SECONDS * 1000);
       setResendMessage('A new code has been sent to your email');
     } else {
       setError(result.error ?? 'Failed to resend code');
@@ -105,7 +101,13 @@ export default function VerifyScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backButton}>
+          {/* C4: Accessibility label and role for screen readers */}
+          <Pressable
+            onPress={() => router.back()}
+            style={styles.backButton}
+            accessibilityLabel="Go back"
+            accessibilityRole="button"
+          >
             <IconSymbol name="chevron.left" size={28} color={tintColor} />
           </Pressable>
           <ThemedText type="subtitle" style={styles.headerTitle}>
@@ -146,7 +148,7 @@ export default function VerifyScreen() {
 
           <View style={styles.footer}>
             <ThemedText style={{ color: textSecondary }}>
-              Didn't receive a code?{' '}
+              {"Didn't receive a code? "}
             </ThemedText>
             <Pressable onPress={handleResend} disabled={isResendLocked}>
               <ThemedText type="link">

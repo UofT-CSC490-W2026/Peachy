@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { StyleSheet, View, ScrollView, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
@@ -8,10 +8,9 @@ import { FormTextInput } from '@/components/form/form-text-input';
 import { AuthButton } from '@/components/auth/auth-button';
 import { useAuth } from '@/contexts/auth-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useCountdown } from '@/hooks/use-countdown';
 import { validateLoginForm } from '@/utils/validation';
-
-// Lock durations by attempt count (seconds)
-const LOCK_DURATIONS: Record<number, number> = { 3: 30, 4: 60, 5: 120 };
+import { AUTH_CONSTANTS } from '@/constants/auth';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -25,30 +24,13 @@ export default function LoginScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Rate limiting state
+  // S7: loginAttempts is React state — it resets on every app restart or
+  // navigation away. This is intentional: the counter is a UX hint only.
+  // Real rate limiting is enforced server-side by Cognito (and optionally WAF).
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
-  const [countdown, setCountdown] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (lockedUntil === null) return;
-
-    const tick = () => {
-      const remaining = Math.ceil((lockedUntil - Date.now()) / 1000);
-      if (remaining <= 0) {
-        setCountdown(0);
-        setLockedUntil(null);
-        if (timerRef.current) clearInterval(timerRef.current);
-      } else {
-        setCountdown(remaining);
-      }
-    };
-
-    tick();
-    timerRef.current = setInterval(tick, 1000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [lockedUntil]);
+  // C1: Shared countdown hook replaces the duplicated useEffect+setInterval block.
+  const countdown = useCountdown(lockedUntil);
 
   const isLocked = lockedUntil !== null && Date.now() < lockedUntil;
 
@@ -67,15 +49,23 @@ export default function LoginScreen() {
 
     const result = await login(email, password);
     if (!result.success) {
+      const newAttempts = loginAttempts + 1;
+      setLoginAttempts(newAttempts);
+      const lockSeconds =
+        AUTH_CONSTANTS.LOGIN_LOCK_DURATIONS[newAttempts] ??
+        (newAttempts > 5 ? AUTH_CONSTANTS.LOGIN_MAX_LOCK_SECONDS : null);
+      if (lockSeconds) {
+        setLockedUntil(Date.now() + lockSeconds * 1000);
+      }
+      // S6: Do not redirect to the verify screen on UserNotConfirmedException —
+      // redirecting would reveal that the email exists as an unverified account
+      // (account enumeration). Show a generic message instead. The verify screen
+      // is only reachable from the signup flow.
       if (result.pendingVerification) {
-        router.push({ pathname: '/(auth)/verify' as never, params: { email } });
+        setFormError(
+          "There was a problem signing in. If you haven't verified your email, please check your inbox."
+        );
       } else {
-        const newAttempts = loginAttempts + 1;
-        setLoginAttempts(newAttempts);
-        const lockSeconds = LOCK_DURATIONS[newAttempts] ?? (newAttempts > 5 ? 120 : null);
-        if (lockSeconds) {
-          setLockedUntil(Date.now() + lockSeconds * 1000);
-        }
         setFormError(result.error ?? 'Login failed. Please try again.');
       }
     } else {
@@ -118,7 +108,9 @@ export default function LoginScreen() {
               onChangeText={setPassword}
               placeholder="Enter your password"
               secureTextEntry
-              autoComplete="off"
+              // S14: Use "current-password" (not "off") so password managers can
+              // autofill saved credentials, which is safer than manual re-entry.
+              autoComplete="current-password"
               showToggle
               error={errors.password}
             />
@@ -157,7 +149,7 @@ export default function LoginScreen() {
 
           <View style={styles.footer}>
             <ThemedText style={{ color: textSecondary }}>
-              Don't have an account?{' '}
+              {"Don't have an account? "}
             </ThemedText>
             <Pressable onPress={() => router.replace('/(auth)/signup')}>
               <ThemedText type="link">Sign Up</ThemedText>

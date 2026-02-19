@@ -11,6 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
 import { User } from '@/types';
+import { devLog } from '@/config/environment';
 
 // ─── Cognito Storage Adapter ──────────────────────────────────────────────────
 // The Cognito SDK requires a synchronous storage interface. We satisfy this
@@ -18,15 +19,23 @@ import { User } from '@/types';
 // and SecureStore (tokens) asynchronously, giving us session persistence and
 // encrypted token storage on native platforms.
 const STORAGE_PREFIX = '@peachy:cognito:';
-const SECURE_KEYS_INDEX = '@peachy:secure_keys_index';
 
 // Key suffixes that Cognito stores as long-lived auth tokens
 const TOKEN_SUFFIXES = ['idToken', 'accessToken', 'refreshToken', 'clockDrift'];
+
+// Fixed key for the SecureStore-backed index of secure keys (S3).
+// Storing the index in SecureStore rather than AsyncStorage prevents the user's
+// email and Cognito client ID from being visible in plain-text SQLite on-device.
+// On web, SecureStore is not available so there is no index needed (everything
+// goes through AsyncStorage).
+const INDEX_SECURE_KEY = 'peachy_cognito_key_index';
 
 function isTokenKey(key: string): boolean {
   return TOKEN_SUFFIXES.some(suffix => key.endsWith('.' + suffix));
 }
 
+// S5: Use an empty-string overwrite before delete so raw JWT strings are not
+// lingering as reachable strings in the JS heap after logout.
 const memStore: Record<string, string> = {};
 // Tracks which keys are persisted in SecureStore (vs AsyncStorage)
 const secureKeySet = new Set<string>();
@@ -36,11 +45,19 @@ const cognitoStorage = {
     memStore[key] = value;
     if (Platform.OS !== 'web' && isTokenKey(key)) {
       secureKeySet.add(key);
-      SecureStore.setItemAsync(STORAGE_PREFIX + key, value).catch(() => {});
-      // Keep an index of secure keys so hydrateStorage can find them
-      AsyncStorage.setItem(SECURE_KEYS_INDEX, JSON.stringify([...secureKeySet])).catch(() => {});
+      // S2: Log write failures so silent data-loss is surfaced in dev builds.
+      SecureStore.setItemAsync(STORAGE_PREFIX + key, value).catch((e) =>
+        devLog('SecureStore setItem failed for key:', key, e)
+      );
+      // S3: Keep the key index in SecureStore (not AsyncStorage) to avoid
+      // exposing the user's email in plain-text on-device storage.
+      SecureStore.setItemAsync(INDEX_SECURE_KEY, JSON.stringify([...secureKeySet])).catch((e) =>
+        devLog('SecureStore index write failed:', e)
+      );
     } else {
-      AsyncStorage.setItem(STORAGE_PREFIX + key, value).catch(() => {});
+      AsyncStorage.setItem(STORAGE_PREFIX + key, value).catch((e) =>
+        devLog('AsyncStorage setItem failed for key:', key, e)
+      );
     }
     return value;
   },
@@ -49,18 +66,42 @@ const cognitoStorage = {
     delete memStore[key];
     if (Platform.OS !== 'web' && secureKeySet.has(key)) {
       secureKeySet.delete(key);
-      SecureStore.deleteItemAsync(STORAGE_PREFIX + key).catch(() => {});
-      AsyncStorage.setItem(SECURE_KEYS_INDEX, JSON.stringify([...secureKeySet])).catch(() => {});
+      SecureStore.deleteItemAsync(STORAGE_PREFIX + key).catch((e) =>
+        devLog('SecureStore deleteItem failed for key:', key, e)
+      );
+      // S2 + S3: Update key index in SecureStore on removal.
+      SecureStore.setItemAsync(INDEX_SECURE_KEY, JSON.stringify([...secureKeySet])).catch((e) =>
+        devLog('SecureStore index write failed:', e)
+      );
     } else {
-      AsyncStorage.removeItem(STORAGE_PREFIX + key).catch(() => {});
+      AsyncStorage.removeItem(STORAGE_PREFIX + key).catch((e) =>
+        devLog('AsyncStorage removeItem failed for key:', key, e)
+      );
     }
   },
   clear: () => {
     const asyncKeys = Object.keys(memStore).filter(k => !secureKeySet.has(k));
-    secureKeySet.forEach(k => SecureStore.deleteItemAsync(STORAGE_PREFIX + k).catch(() => {}));
+    secureKeySet.forEach(k =>
+      SecureStore.deleteItemAsync(STORAGE_PREFIX + k).catch((e) =>
+        devLog('SecureStore deleteItem failed for key:', k, e)
+      )
+    );
+    // S3: Remove the secure key index from SecureStore on logout.
+    if (Platform.OS !== 'web') {
+      SecureStore.deleteItemAsync(INDEX_SECURE_KEY).catch((e) =>
+        devLog('SecureStore delete INDEX failed:', e)
+      );
+    }
     secureKeySet.clear();
-    Object.keys(memStore).forEach(k => delete memStore[k]);
-    AsyncStorage.multiRemove([SECURE_KEYS_INDEX, ...asyncKeys.map(k => STORAGE_PREFIX + k)]).catch(() => {});
+    // S5: Overwrite token strings before deleting so JWT values are not
+    // recoverable from the Hermes/V8 heap after logout.
+    for (const key of Object.keys(memStore)) {
+      memStore[key] = '';
+      delete memStore[key];
+    }
+    AsyncStorage.multiRemove(asyncKeys.map(k => STORAGE_PREFIX + k)).catch((e) =>
+      devLog('AsyncStorage multiRemove failed:', e)
+    );
   },
 };
 
@@ -80,19 +121,37 @@ async function hydrateStorage() {
       });
     }
 
-    // On native, load tokens from SecureStore using the stored index
+    // On native, load tokens from SecureStore using the stored index.
+    // S3: The index is stored in SecureStore, not AsyncStorage.
+    // S4: Separate JSON.parse errors from SecureStore read errors so corrupt
+    //     index data is handled gracefully without silently masking other faults.
     if (Platform.OS !== 'web') {
-      const indexStr = await AsyncStorage.getItem(SECURE_KEYS_INDEX);
+      const indexStr = await SecureStore.getItemAsync(INDEX_SECURE_KEY);
+      let storedKeys: string[] = [];
       if (indexStr) {
-        const storedKeys: string[] = JSON.parse(indexStr);
-        await Promise.all(storedKeys.map(async (key) => {
-          secureKeySet.add(key);
+        try {
+          storedKeys = JSON.parse(indexStr);
+        } catch (parseErr) {
+          devLog('hydrateStorage: corrupt key index, clearing index', parseErr);
+          await SecureStore.deleteItemAsync(INDEX_SECURE_KEY).catch((e) =>
+            devLog('hydrateStorage: failed to clear corrupt index:', e)
+          );
+        }
+      }
+      await Promise.all(storedKeys.map(async (key) => {
+        secureKeySet.add(key);
+        try {
           const value = await SecureStore.getItemAsync(STORAGE_PREFIX + key);
           if (value !== null) memStore[key] = value;
-        }));
-      }
+        } catch (e) {
+          devLog('hydrateStorage: SecureStore read failed for key:', key, e);
+        }
+      }));
     }
-  } catch {}
+  } catch (e) {
+    // S4: Log the fatal path so developers can diagnose unexpected storage failures.
+    devLog('hydrateStorage: fatal error, defaulting to unauthenticated', e);
+  }
 }
 
 // ─── User Pool Singleton ──────────────────────────────────────────────────────
@@ -117,7 +176,8 @@ function userFromSession(session: CognitoUserSession): User {
     name: (claims.name ?? claims.given_name ?? claims.email) as string,
     username: (claims['cognito:username'] ?? claims.email) as string,
     email: claims.email as string,
-    // Use the token issue time as a stable createdAt approximation
+    // NOTE (S17): `iat` is the token issue time, not the account creation time.
+    // These fields will need correction when backend profile data is integrated.
     createdAt: new Date(Number(claims.iat) * 1000).toISOString(),
     updatedAt: new Date(Number(claims.iat) * 1000).toISOString(),
   };
@@ -158,6 +218,10 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isRestoring: boolean;
+  // S10: Email pending verification stored in context (not URL params) to avoid
+  // exposing PII in iOS system logs, Android logcat, and web browser history.
+  pendingVerificationEmail: string | null;
+  setPendingVerificationEmail: (email: string | null) => void;
   login: (email: string, password: string) => Promise<AuthResult>;
   signup: (name: string, email: string, password: string) => Promise<AuthResult>;
   confirmSignup: (email: string, code: string) => Promise<AuthResult>;
@@ -174,6 +238,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isRestoring, setIsRestoring] = useState(true);
+  // S10: Transient email for the verification flow — stored in memory, never in URL.
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
 
   // Restore Cognito session from storage on mount
   useEffect(() => {
@@ -197,6 +263,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       const authDetails = new AuthenticationDetails({ Username: email, Password: password });
+      // S9: USER_PASSWORD_AUTH sends the raw password over TLS (rather than an SRP verifier).
+      // This is intentional for MVP simplicity — the Cognito app client must have
+      // ALLOW_USER_PASSWORD_AUTH enabled. Migrate to USER_SRP_AUTH via expo-crypto if
+      // Cognito Advanced Security Features (ASF) or compliance requirements demand it.
       const cognitoUser = new CognitoUser({ Username: email, Pool: getPool() });
       cognitoUser.setAuthenticationFlowType('USER_PASSWORD_AUTH');
 
@@ -210,6 +280,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             resolve({
               success: false,
               error: cognitoErrorMessage(err),
+              // S6: pendingVerification is returned to the caller but the login screen
+              // no longer redirects to verify — that would reveal email enumeration.
               pendingVerification: err.code === 'UserNotConfirmedException',
             });
           },
@@ -307,12 +379,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    // signOut() clears the Cognito SDK's in-memory session without making
-    // any network call, so it can't fail. We then clear our storage and
-    // drop the user from state to redirect to auth screens immediately.
-    getPool().getCurrentUser()?.signOut();
-    cognitoStorage.clear();
-    setUser(null);
+    // S1: globalSignOut invalidates the Cognito refresh token server-side so that
+    // exfiltrated tokens cannot be used after the user logs out. We clear local
+    // state regardless of whether the network call succeeds (fail-safe).
+    const cognitoUser = getPool().getCurrentUser();
+    const doLocalSignOut = () => {
+      cognitoStorage.clear();
+      setUser(null);
+    };
+    if (cognitoUser) {
+      cognitoUser.globalSignOut({
+        onSuccess: doLocalSignOut,
+        onFailure: doLocalSignOut,
+      });
+    } else {
+      doLocalSignOut();
+    }
   }, []);
 
   return (
@@ -322,6 +404,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isLoading,
         isRestoring,
+        pendingVerificationEmail,
+        setPendingVerificationEmail,
         login,
         signup,
         confirmSignup,

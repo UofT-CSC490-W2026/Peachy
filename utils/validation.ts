@@ -5,6 +5,9 @@ export interface ValidationError {
 
 export function validateEmail(email: string): string | null {
   if (!email.trim()) return 'Email is required';
+  // S11: Enforce RFC 5321 max length and reject consecutive dots (invalid per spec)
+  if (email.length > 254) return 'Email address is too long';
+  if (/\.{2,}/.test(email)) return 'Please enter a valid email address';
   const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
   if (!emailRegex.test(email)) return 'Please enter a valid email address';
   return null;

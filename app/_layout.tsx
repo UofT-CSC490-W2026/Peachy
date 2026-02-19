@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useSegments, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -18,6 +19,7 @@ function RootNavigator() {
   const segments = useSegments();
   const router = useRouter();
 
+  // All hooks must run unconditionally before any conditional return.
   useEffect(() => {
     if (isRestoring) return;
 
@@ -28,7 +30,17 @@ function RootNavigator() {
     } else if (isAuthenticated && inAuthGroup) {
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, isRestoring, segments]);
+  }, [isAuthenticated, isRestoring, segments, router]);
+
+  // S13: Render a neutral loading screen while the session is being restored so
+  // that protected tab content never briefly flashes before the redirect fires.
+  if (isRestoring) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
 
   return (
     <CalendarProvider>

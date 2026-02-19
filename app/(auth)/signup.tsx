@@ -12,7 +12,7 @@ import { validateSignupForm } from '@/utils/validation';
 
 export default function SignupScreen() {
   const router = useRouter();
-  const { signup, isLoading } = useAuth();
+  const { signup, isLoading, setPendingVerificationEmail } = useAuth();
   const textSecondary = useThemeColor({}, 'textSecondary');
   const borderColor = useThemeColor({}, 'border');
   const dangerColor = useThemeColor({}, 'danger');
@@ -37,7 +37,10 @@ export default function SignupScreen() {
 
     const result = await signup(name, email, password);
     if (result.success && result.pendingVerification) {
-      router.push({ pathname: '/(auth)/verify' as never, params: { email } });
+      // S10: Store email in AuthContext (not URL params) to avoid PII appearing in
+      // system logs and browser history. C3: No type cast needed with typed routes.
+      setPendingVerificationEmail(email);
+      router.push('/(auth)/verify');
     } else if (!result.success) {
       setFormError(result.error ?? 'Sign up failed. Please try again.');
     }
