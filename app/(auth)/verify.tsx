@@ -36,12 +36,13 @@ export default function VerifyScreen() {
   const resendCountdown = useCountdown(resendCooldownUntil);
 
   // S8: Guard against arriving here without a pending verification email
-  // (e.g. direct deep-link or stale navigation state). Redirect to signup.
+  // (e.g. direct deep-link or stale navigation state). Only active before
+  // verification — once verified the user is free to navigate away normally.
   useEffect(() => {
-    if (!email) {
+    if (!email && !verified) {
       router.replace('/(auth)/signup');
     }
-  }, [email, router]);
+  }, [email, verified, router]);
 
   // Clear transient email when the screen loses focus after verification, so that
   // any subsequent navigation to this screen (via back gesture, deep link, etc.)
@@ -101,10 +102,7 @@ export default function VerifyScreen() {
           </ThemedText>
           <AuthButton
             title="Log In"
-            onPress={() => {
-              setPendingVerificationEmail(null);
-              router.replace('/(auth)/login');
-            }}
+            onPress={() => router.replace('/(auth)/login')}
           />
         </View>
       </ThemedView>
