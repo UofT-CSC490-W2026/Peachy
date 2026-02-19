@@ -30,6 +30,17 @@ const TOKEN_SUFFIXES = ['idToken', 'accessToken', 'refreshToken', 'clockDrift'];
 // goes through AsyncStorage).
 const INDEX_SECURE_KEY = 'peachy_cognito_key_index';
 
+// Encode any character outside [a-zA-Z0-9.-] as _XX (uppercase hex) so the
+// resulting key is always valid for expo-secure-store (max 256 chars, restricted
+// charset). Note: '_' is intentionally excluded from the passthrough set so it
+// is itself encoded as '_5F', ensuring the escape prefix never collides with a
+// literal underscore in the source key (e.g. an email like user_name@host.com).
+function sanitizeSecureKey(key: string): string {
+  return key.replace(/[^a-zA-Z0-9.-]/g, (ch) =>
+    '_' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')
+  );
+}
+
 function isTokenKey(key: string): boolean {
   return TOKEN_SUFFIXES.some(suffix => key.endsWith('.' + suffix));
 }
@@ -40,14 +51,20 @@ const memStore: Record<string, string> = {};
 // Tracks which keys are persisted in SecureStore (vs AsyncStorage)
 const secureKeySet = new Set<string>();
 
+// S2+: Log only the token type suffix (e.g. "idToken"), never the full key which
+// contains the user's email address (format: ...PoolId.<email>.<tokenType>).
+function redactKey(key: string): string {
+  return key.split('.').pop() ?? 'unknown';
+}
+
 const cognitoStorage = {
   setItem: (key: string, value: string) => {
     memStore[key] = value;
     if (Platform.OS !== 'web' && isTokenKey(key)) {
       secureKeySet.add(key);
       // S2: Log write failures so silent data-loss is surfaced in dev builds.
-      SecureStore.setItemAsync(STORAGE_PREFIX + key, value).catch((e) =>
-        devLog('SecureStore setItem failed for key:', key, e)
+      SecureStore.setItemAsync(sanitizeSecureKey(STORAGE_PREFIX + key), value).catch((e) =>
+        devLog('SecureStore setItem failed for token type:', redactKey(key), e)
       );
       // S3: Keep the key index in SecureStore (not AsyncStorage) to avoid
       // exposing the user's email in plain-text on-device storage.
@@ -56,7 +73,7 @@ const cognitoStorage = {
       );
     } else {
       AsyncStorage.setItem(STORAGE_PREFIX + key, value).catch((e) =>
-        devLog('AsyncStorage setItem failed for key:', key, e)
+        devLog('AsyncStorage setItem failed for token type:', redactKey(key), e)
       );
     }
     return value;
@@ -66,8 +83,8 @@ const cognitoStorage = {
     delete memStore[key];
     if (Platform.OS !== 'web' && secureKeySet.has(key)) {
       secureKeySet.delete(key);
-      SecureStore.deleteItemAsync(STORAGE_PREFIX + key).catch((e) =>
-        devLog('SecureStore deleteItem failed for key:', key, e)
+      SecureStore.deleteItemAsync(sanitizeSecureKey(STORAGE_PREFIX + key)).catch((e) =>
+        devLog('SecureStore deleteItem failed for token type:', redactKey(key), e)
       );
       // S2 + S3: Update key index in SecureStore on removal.
       SecureStore.setItemAsync(INDEX_SECURE_KEY, JSON.stringify([...secureKeySet])).catch((e) =>
@@ -75,15 +92,15 @@ const cognitoStorage = {
       );
     } else {
       AsyncStorage.removeItem(STORAGE_PREFIX + key).catch((e) =>
-        devLog('AsyncStorage removeItem failed for key:', key, e)
+        devLog('AsyncStorage removeItem failed for token type:', redactKey(key), e)
       );
     }
   },
   clear: () => {
     const asyncKeys = Object.keys(memStore).filter(k => !secureKeySet.has(k));
     secureKeySet.forEach(k =>
-      SecureStore.deleteItemAsync(STORAGE_PREFIX + k).catch((e) =>
-        devLog('SecureStore deleteItem failed for key:', k, e)
+      SecureStore.deleteItemAsync(sanitizeSecureKey(STORAGE_PREFIX + k)).catch((e) =>
+        devLog('SecureStore deleteItem failed for token type:', redactKey(k), e)
       )
     );
     // S3: Remove the secure key index from SecureStore on logout.
@@ -141,10 +158,10 @@ async function hydrateStorage() {
       await Promise.all(storedKeys.map(async (key) => {
         secureKeySet.add(key);
         try {
-          const value = await SecureStore.getItemAsync(STORAGE_PREFIX + key);
+          const value = await SecureStore.getItemAsync(sanitizeSecureKey(STORAGE_PREFIX + key));
           if (value !== null) memStore[key] = value;
         } catch (e) {
-          devLog('hydrateStorage: SecureStore read failed for key:', key, e);
+          devLog('hydrateStorage: SecureStore read failed for token type:', redactKey(key), e);
         }
       }));
     }
@@ -153,6 +170,19 @@ async function hydrateStorage() {
     devLog('hydrateStorage: fatal error, defaulting to unauthenticated', e);
   }
 }
+
+// ─── Token Refresh Deduplication ──────────────────────────────────────────────
+// Ensures concurrent API calls that all need a token share one in-flight getSession
+// call instead of racing on a potentially single-use Cognito refresh token.
+let _inflightTokenRequest: Promise<string | null> | null = null;
+
+// ─── Cached CognitoUser ───────────────────────────────────────────────────────
+// Holds a reference to the authenticated CognitoUser after login or session
+// restore. Using the same instance preserves the in-memory signInUserSession
+// cache so getSession() can return immediately without reconstructing the session
+// from storage (which requires LastAuthUser plus all token keys to be readable).
+// Cleared to null on logout so getIdToken() correctly resolves null.
+let _currentCognitoUser: CognitoUser | null = null;
 
 // ─── User Pool Singleton ──────────────────────────────────────────────────────
 let _pool: CognitoUserPool | null = null;
@@ -222,6 +252,7 @@ interface AuthContextType {
   // exposing PII in iOS system logs, Android logcat, and web browser history.
   pendingVerificationEmail: string | null;
   setPendingVerificationEmail: (email: string | null) => void;
+  getIdToken: () => Promise<string | null>;
   login: (email: string, password: string) => Promise<AuthResult>;
   signup: (name: string, email: string, password: string) => Promise<AuthResult>;
   confirmSignup: (email: string, code: string) => Promise<AuthResult>;
@@ -252,6 +283,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       currentUser.getSession((err: Error | null, session: CognitoUserSession | null) => {
         if (!err && session?.isValid()) {
+          _currentCognitoUser = currentUser;
           setUser(userFromSession(session));
         }
         setIsRestoring(false);
@@ -273,6 +305,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return await new Promise<AuthResult>((resolve) => {
         cognitoUser.authenticateUser(authDetails, {
           onSuccess: (session) => {
+            _currentCognitoUser = cognitoUser;
             setUser(userFromSession(session));
             resolve({ success: true });
           },
@@ -378,12 +411,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const getIdToken = useCallback((): Promise<string | null> => {
+    // Return the in-flight request if one is already pending so concurrent
+    // callers share the same Cognito session refresh (refresh tokens are single-use).
+    if (_inflightTokenRequest) return _inflightTokenRequest;
+    _inflightTokenRequest = new Promise<string | null>((resolve) => {
+      // Prefer the cached CognitoUser (set on login/session-restore) because it
+      // already has signInUserSession in memory — getSession() returns immediately
+      // without reading from storage. Fallback to getCurrentUser() covers any edge
+      // case where the cache is stale (e.g., mid-logout race).
+      const cognitoUser = _currentCognitoUser ?? getPool().getCurrentUser();
+      if (!cognitoUser) {
+        resolve(null);
+        return;
+      }
+      cognitoUser.getSession((err: Error | null, session: CognitoUserSession | null) => {
+        if (err || !session?.isValid()) {
+          resolve(null);
+          return;
+        }
+        resolve(session.getIdToken().getJwtToken());
+      });
+    }).finally(() => { _inflightTokenRequest = null; });
+    return _inflightTokenRequest;
+  }, []);
+
   const logout = useCallback(() => {
     // S1: globalSignOut invalidates the Cognito refresh token server-side so that
     // exfiltrated tokens cannot be used after the user logs out. We clear local
     // state regardless of whether the network call succeeds (fail-safe).
     const cognitoUser = getPool().getCurrentUser();
     const doLocalSignOut = () => {
+      _currentCognitoUser = null;
       cognitoStorage.clear();
       setUser(null);
     };
@@ -406,6 +465,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isRestoring,
         pendingVerificationEmail,
         setPendingVerificationEmail,
+        getIdToken,
         login,
         signup,
         confirmSignup,

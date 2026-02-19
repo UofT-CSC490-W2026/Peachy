@@ -1,4 +1,4 @@
-import { StyleSheet, ScrollView, View, Pressable, Alert, Modal } from 'react-native';
+import { StyleSheet, ScrollView, View, Pressable, Alert, Modal, ActivityIndicator } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
@@ -12,6 +12,8 @@ import { FormDatePicker } from '@/components/form/form-date-picker';
 import { AvailabilityViewer } from '@/components/availability-viewer';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useCalendar } from '@/contexts/calendar-context';
+import { useAuth } from '@/contexts/auth-context';
+import { AuthError } from '@/utils/api-client';
 import { contacts, currentUser } from '@/data/mock-data';
 
 export default function EventEditScreen() {
@@ -19,7 +21,8 @@ export default function EventEditScreen() {
   const params = useLocalSearchParams();
   const eventId = params.id as string;
 
-  const { calendars, events } = useCalendar();
+  const { calendars, events, updateEvent } = useCalendar();
+  const { logout } = useAuth();
   const event = events.find(e => e.id === eventId);
   const isOwner = event && event.createdBy === currentUser.id;
 
@@ -36,6 +39,7 @@ export default function EventEditScreen() {
   const [location, setLocation] = useState(event?.location || '');
   const [description, setDescription] = useState(event?.description || '');
   const [invitedUserIds, setInvitedUserIds] = useState<string[]>(event?.invitedUserIds || []);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Handle return from user search
   useEffect(() => {
@@ -76,16 +80,37 @@ export default function EventEditScreen() {
     );
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!title.trim()) {
       Alert.alert('Error', 'Please enter an event title');
       return;
     }
 
-    // In real app, this would update via API
-    Alert.alert('Success', 'Event updated!', [
-      { text: 'OK', onPress: () => router.back() },
-    ]);
+    setIsSaving(true);
+    try {
+      await updateEvent(event.calendarId, event.id, {
+        title: title.trim(),
+        calendarId: selectedCalendar.id,
+        isAllDay,
+        startTime: startDate.toISOString(),
+        endTime: endDate.toISOString(),
+        location: location.trim() || undefined,
+        description: description.trim() || undefined,
+        invitedUserIds,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      });
+      router.back();
+    } catch (err) {
+      if (err instanceof AuthError) {
+        Alert.alert('Session Expired', 'Your session has expired. Please log in again.', [
+          { text: 'OK', onPress: logout },
+        ]);
+        return;
+      }
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update event');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -214,11 +239,16 @@ export default function EventEditScreen() {
           </Pressable>
           <Pressable
             onPress={handleSave}
-            style={[styles.button, styles.saveButton, { backgroundColor: tintColor }]}
+            disabled={isSaving}
+            style={[styles.button, styles.saveButton, { backgroundColor: tintColor, opacity: isSaving ? 0.7 : 1 }]}
           >
-            <ThemedText style={styles.saveButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
-              Save Changes
-            </ThemedText>
+            {isSaving ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <ThemedText style={styles.saveButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
+                Save Changes
+              </ThemedText>
+            )}
           </Pressable>
         </View>
       </ScrollView>
