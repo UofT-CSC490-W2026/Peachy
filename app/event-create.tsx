@@ -38,13 +38,15 @@ export default function EventCreateScreen() {
   const [isAllDay, setIsAllDay] = useState(params.isAllDay === 'true');
   const [startDate, setStartDate] = useState(() => {
     if (params.startTime) {
-      return new Date(params.startTime as string);
+      const parsed = new Date(params.startTime as string);
+      if (!isNaN(parsed.getTime())) return parsed;
     }
     return new Date();
   });
   const [endDate, setEndDate] = useState(() => {
     if (params.endTime) {
-      return new Date(params.endTime as string);
+      const parsed = new Date(params.endTime as string);
+      if (!isNaN(parsed.getTime())) return parsed;
     }
     const end = new Date();
     end.setHours(end.getHours() + 1);
@@ -81,8 +83,14 @@ export default function EventCreateScreen() {
   // Handle return from user search
   useEffect(() => {
     if (params.selectedUsers) {
-      const userIds = JSON.parse(params.selectedUsers as string);
-      setInvitedUserIds(userIds);
+      try {
+        const parsed: unknown = JSON.parse(params.selectedUsers as string);
+        if (Array.isArray(parsed) && parsed.every((item): item is string => typeof item === 'string')) {
+          setInvitedUserIds(parsed);
+        }
+      } catch {
+        // Ignore malformed param — keep current invitee list
+      }
     }
   }, [params.selectedUsers]);
 
@@ -93,6 +101,14 @@ export default function EventCreateScreen() {
     }
     if (!selectedCalendar) {
       Alert.alert('Error', 'Please select a calendar');
+      return;
+    }
+    if (!isAllDay && endDate <= startDate) {
+      Alert.alert('Invalid Time', 'End time must be after start time');
+      return;
+    }
+    if (isAllDay && endDate < startDate) {
+      Alert.alert('Invalid Date', 'End date must be on or after start date');
       return;
     }
 
@@ -146,7 +162,7 @@ export default function EventCreateScreen() {
           if (action === 'move') {
             body.movedToSlotIndex = getSlotIndex(startDate);
           }
-          fetch(`${apiUrl}/users/${user.id}/rl/feedback`, {
+          fetch(`${apiUrl}/users/${encodeURIComponent(user.id)}/rl/feedback`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -211,11 +227,11 @@ export default function EventCreateScreen() {
         </FormField>
 
         <FormField label="Start Time">
-          <FormDatePicker date={startDate} onDateChange={setStartDate} />
+          <FormDatePicker date={startDate} onDateChange={setStartDate} isAllDay={isAllDay} />
         </FormField>
 
         <FormField label="End Time">
-          <FormDatePicker date={endDate} onDateChange={setEndDate} />
+          <FormDatePicker date={endDate} onDateChange={setEndDate} isAllDay={isAllDay} />
         </FormField>
 
         <FormField label="Location">

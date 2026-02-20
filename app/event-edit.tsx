@@ -34,8 +34,20 @@ export default function EventEditScreen() {
   const [selectedCalendar, setSelectedCalendar] = useState(event ? calendars.find(c => c.id === event.calendarId) || calendars[0] : calendars[0]);
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [isAllDay, setIsAllDay] = useState(event?.isAllDay || false);
-  const [startDate, setStartDate] = useState(event ? new Date(event.startTime) : new Date());
-  const [endDate, setEndDate] = useState(event ? new Date(event.endTime) : new Date());
+  const [startDate, setStartDate] = useState(() => {
+    if (event?.startTime) {
+      const parsed = new Date(event.startTime);
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
+    return new Date();
+  });
+  const [endDate, setEndDate] = useState(() => {
+    if (event?.endTime) {
+      const parsed = new Date(event.endTime);
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
+    return new Date();
+  });
   const [location, setLocation] = useState(event?.location || '');
   const [description, setDescription] = useState(event?.description || '');
   const [invitedUserIds, setInvitedUserIds] = useState<string[]>(event?.invitedUserIds || []);
@@ -44,8 +56,14 @@ export default function EventEditScreen() {
   // Handle return from user search
   useEffect(() => {
     if (params.selectedUsers) {
-      const userIds = JSON.parse(params.selectedUsers as string);
-      setInvitedUserIds(userIds);
+      try {
+        const parsed: unknown = JSON.parse(params.selectedUsers as string);
+        if (Array.isArray(parsed) && parsed.every((item): item is string => typeof item === 'string')) {
+          setInvitedUserIds(parsed);
+        }
+      } catch {
+        // Ignore malformed param — keep current invitee list
+      }
     }
   }, [params.selectedUsers]);
 
@@ -83,6 +101,14 @@ export default function EventEditScreen() {
   const handleSave = async () => {
     if (!title.trim()) {
       Alert.alert('Error', 'Please enter an event title');
+      return;
+    }
+    if (!isAllDay && endDate <= startDate) {
+      Alert.alert('Invalid Time', 'End time must be after start time');
+      return;
+    }
+    if (isAllDay && endDate < startDate) {
+      Alert.alert('Invalid Date', 'End date must be on or after start date');
       return;
     }
 
@@ -152,11 +178,11 @@ export default function EventEditScreen() {
         </FormField>
 
         <FormField label="Start Time">
-          <FormDatePicker date={startDate} onDateChange={setStartDate} />
+          <FormDatePicker date={startDate} onDateChange={setStartDate} isAllDay={isAllDay} />
         </FormField>
 
         <FormField label="End Time">
-          <FormDatePicker date={endDate} onDateChange={setEndDate} />
+          <FormDatePicker date={endDate} onDateChange={setEndDate} isAllDay={isAllDay} />
         </FormField>
 
         <FormField label="Location">
