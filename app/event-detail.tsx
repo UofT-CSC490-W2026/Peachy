@@ -217,7 +217,7 @@ export default function EventDetailScreen() {
         )}
 
         {/* Reminders */}
-        {event.reminders.length > 0 && (
+        {event.reminders?.length > 0 && (
           <View style={[styles.section, { backgroundColor: surfaceColor, borderColor }]}>
             <View style={styles.sectionRow}>
               <IconSymbol name="bell" size={24} color={tintColor} />
