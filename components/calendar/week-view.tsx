@@ -22,6 +22,8 @@ export function WeekView({ currentDate, events, calendars }: WeekViewProps) {
     return getEventsForDay(events, weekDates[columnIndex]);
   };
 
+  const getColumnDate = (columnIndex: number) => weekDates[columnIndex];
+
   return (
     <View style={styles.container}>
       {/* Day headers */}
@@ -60,7 +62,7 @@ export function WeekView({ currentDate, events, calendars }: WeekViewProps) {
       </View>
 
       {/* Time grid */}
-      <TimeGrid events={events} calendars={calendars} columns={7} getColumnEvents={getColumnEvents} />
+      <TimeGrid events={events} calendars={calendars} columns={7} getColumnEvents={getColumnEvents} getColumnDate={getColumnDate} />
     </View>
   );
 }

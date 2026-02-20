@@ -14,7 +14,7 @@ export function DayView({ currentDate, events, calendars }: DayViewProps) {
 
   return (
     <View style={styles.container}>
-      <TimeGrid events={dayEvents} calendars={calendars} columns={1} />
+      <TimeGrid events={dayEvents} calendars={calendars} columns={1} getColumnDate={() => currentDate} />
     </View>
   );
 }

@@ -39,20 +39,31 @@ interface TimeGridProps {
   calendars: Calendar[];
   columns?: number; // 1 for day view, 7 for week view
   getColumnEvents?: (columnIndex: number) => CalendarEvent[];
+  getColumnDate?: (columnIndex: number) => Date;
 }
 
-export function TimeGrid({ events, calendars, columns = 1, getColumnEvents }: TimeGridProps) {
+export function TimeGrid({ events, calendars, columns = 1, getColumnEvents, getColumnDate }: TimeGridProps) {
   const router = useRouter();
   const borderColor = useThemeColor({}, 'borderLight');
   const textSecondary = useThemeColor({}, 'textSecondary');
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
-  const renderEvent = (event: CalendarEvent, layout?: { left: number; width: number }) => {
-    const startTime = new Date(event.startTime);
-    const endTime = new Date(event.endTime);
-    const top = getEventTopOffset(startTime);
-    const height = getEventHeight(startTime, endTime);
+  const renderEvent = (event: CalendarEvent, layout?: { left: number; width: number }, columnDate?: Date) => {
+    const rawStart = new Date(event.startTime);
+    const rawEnd = new Date(event.endTime);
+    let effectiveStart = rawStart;
+    let effectiveEnd = rawEnd;
+    if (columnDate) {
+      const dayStart = new Date(columnDate);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      if (rawStart < dayStart) effectiveStart = dayStart;
+      if (rawEnd > dayEnd) effectiveEnd = dayEnd;
+    }
+    const top = getEventTopOffset(effectiveStart);
+    const height = getEventHeight(effectiveStart, effectiveEnd);
     const cal = calendars.find(c => c.id === event.calendarId);
     const color = cal?.color ?? '#FF8C6B';
 
@@ -113,7 +124,7 @@ export function TimeGrid({ events, calendars, columns = 1, getColumnEvents }: Ti
                     style={[styles.hourSlot, { borderColor }]}
                   />
                 ))}
-                {columnEvents.map(event => renderEvent(event, layout[event.id]))}
+                {columnEvents.map(event => renderEvent(event, layout[event.id], getColumnDate ? getColumnDate(columnIndex) : undefined))}
               </View>
             );
           })}

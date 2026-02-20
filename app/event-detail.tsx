@@ -163,10 +163,10 @@ export default function EventDetailScreen() {
               <IconSymbol name="person.2" size={24} color={tintColor} />
               <View style={styles.sectionContent}>
                 <ThemedText type="defaultSemiBold">
-                  Invitees ({event.invitedUserIds.length})
+                  Invitees ({event.invitedUserIds?.length ?? 0})
                 </ThemedText>
                 <View style={styles.inviteesList}>
-                  {event.invitedUserIds.map(userId => {
+                  {(event.invitedUserIds ?? []).map(userId => {
                     const user = contacts.find(c => c.id === userId);
                     if (!user) return null;
                     return (
