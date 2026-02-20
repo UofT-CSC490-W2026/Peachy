@@ -81,10 +81,14 @@ export function getEventsForDay(events: CalendarEvent[], date: Date): CalendarEv
     const startDate = new Date(event.startTime);
     const endDate = new Date(event.endTime);
 
-    // Check if the event starts on this day or spans this day
-    return isSameDay(startDate, date) ||
-           (startDate < date && endDate > date) ||
-           (event.isAllDay && isSameDay(startDate, date));
+    const dayStart = new Date(date);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+
+    // Event overlaps this day if it starts before day ends AND ends after day starts.
+    // This correctly handles same-day, overnight, multi-day, and all-day events.
+    return startDate < dayEnd && endDate > dayStart;
   });
 }
 

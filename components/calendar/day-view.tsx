@@ -1,19 +1,20 @@
 import { StyleSheet, View } from 'react-native';
 import { TimeGrid } from './time-grid';
-import { CalendarEvent } from '@/types';
+import { Calendar, CalendarEvent } from '@/types';
 import { getEventsForDay } from '@/utils/date-helpers';
 
 interface DayViewProps {
   currentDate: Date;
   events: CalendarEvent[];
+  calendars: Calendar[];
 }
 
-export function DayView({ currentDate, events }: DayViewProps) {
+export function DayView({ currentDate, events, calendars }: DayViewProps) {
   const dayEvents = getEventsForDay(events, currentDate);
 
   return (
     <View style={styles.container}>
-      <TimeGrid events={dayEvents} columns={1} />
+      <TimeGrid events={dayEvents} calendars={calendars} columns={1} getColumnDate={() => currentDate} />
     </View>
   );
 }

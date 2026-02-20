@@ -36,6 +36,7 @@ export default {
       'expo-router',
       'expo-secure-store',
       'expo-web-browser',
+      '@react-native-community/datetimepicker',
       [
         'expo-splash-screen',
         {

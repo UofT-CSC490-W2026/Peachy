@@ -1,8 +1,7 @@
 import { StyleSheet, View, Pressable, Dimensions } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { CalendarEvent } from '@/types';
-import { getCalendarColor } from '@/utils/calendar-helpers';
+import { Calendar, CalendarEvent } from '@/types';
 
 interface MonthDayCellProps {
   date: Date;
@@ -11,6 +10,7 @@ interface MonthDayCellProps {
   isSelected: boolean;
   isToday: boolean;
   onPress: () => void;
+  calendars: Calendar[];
 }
 
 export function MonthDayCell({
@@ -20,6 +20,7 @@ export function MonthDayCell({
   isSelected,
   isToday,
   onPress,
+  calendars,
 }: MonthDayCellProps) {
   const tintColor = useThemeColor({}, 'tint');
   const textSecondary = useThemeColor({}, 'textSecondary');
@@ -60,7 +61,7 @@ export function MonthDayCell({
       {eventColors.length > 0 && (
         <View style={styles.eventDots}>
           {eventColors.map((calendarId) => {
-            const color = getCalendarColor(calendarId);
+            const color = calendars.find(c => c.id === calendarId)?.color ?? '#FF8C6B';
 
             return (
               <View

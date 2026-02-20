@@ -1,12 +1,16 @@
 import { StyleSheet, View, TextInput, Pressable, Alert, Platform, ActivityIndicator } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
+import Constants from 'expo-constants';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { mockAIParse } from '@/utils/ai-parser';
+import { useAuth } from '@/contexts/auth-context';
+import { ApiError, AuthError } from '@/utils/api-client';
+import type { AIParseResult } from '@/utils/ai-parser';
 
 export function AiInputBar() {
   const router = useRouter();
+  const { getIdToken } = useAuth();
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const surfaceColor = useThemeColor({}, 'surface');
@@ -22,13 +26,34 @@ export function AiInputBar() {
     setIsLoading(true);
 
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const token = await getIdToken();
+      if (!token) throw new AuthError();
 
-      // Parse input with AI (mock for now)
-      const parsed = mockAIParse(trimmedInput);
+      const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, string>;
+      const apiUrl = (extra.apiUrl ?? '').replace(/\/$/, '');
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-      // Navigate to create event screen with pre-filled data
+      const response = await fetch(`${apiUrl}/ai/parse`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ inputText: trimmedInput, timezone }),
+      });
+
+      if (response.status === 401) throw new AuthError();
+      if (!response.ok) {
+        let message = `Request failed with status ${response.status}`;
+        try {
+          const errorBody = await response.json() as Record<string, unknown>;
+          if (typeof errorBody.message === 'string') message = errorBody.message;
+        } catch { /* ignore */ }
+        throw new ApiError(message, response.status);
+      }
+
+      const parsed = await response.json() as AIParseResult;
+
       router.push({
         pathname: '/event-create',
         params: {
@@ -40,11 +65,13 @@ export function AiInputBar() {
           isAllDay: parsed.extractedData.isAllDay ? 'true' : 'false',
           location: parsed.extractedData.location || '',
           inviteeIds: parsed.extractedData.invitedUserIds?.join(',') || '',
+          // Full response stored for RL tracking in event-create
+          aiSuggested: JSON.stringify(parsed),
         },
       });
 
       setInputText('');
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Could not understand your request. Please try again.');
     } finally {
       setIsLoading(false);

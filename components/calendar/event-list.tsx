@@ -2,15 +2,15 @@ import { StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { EventCard } from './event-card';
-import { CalendarEvent } from '@/types';
-import { getCalendarColor } from '@/utils/calendar-helpers';
+import { Calendar, CalendarEvent } from '@/types';
 
 interface EventListProps {
   events: CalendarEvent[];
   selectedDate: Date;
+  calendars: Calendar[];
 }
 
-export function EventList({ events, selectedDate }: EventListProps) {
+export function EventList({ events, selectedDate, calendars }: EventListProps) {
   const textSecondary = useThemeColor({}, 'textSecondary');
 
   if (events.length === 0) {
@@ -38,7 +38,7 @@ export function EventList({ events, selectedDate }: EventListProps) {
         <EventCard
           key={item.id}
           event={item}
-          calendarColor={getCalendarColor(item.calendarId)}
+          calendarColor={calendars.find(c => c.id === item.calendarId)?.color ?? '#FF8C6B'}
         />
       ))}
     </View>

@@ -2,7 +2,7 @@ import { StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { MonthDayCell } from './month-day-cell';
-import { CalendarEvent } from '@/types';
+import { Calendar, CalendarEvent } from '@/types';
 import { getMonthGrid, getEventsForDay, isSameDay } from '@/utils/date-helpers';
 
 interface MonthViewProps {
@@ -10,9 +10,10 @@ interface MonthViewProps {
   events: CalendarEvent[];
   selectedDate: Date;
   onSelectDate: (date: Date) => void;
+  calendars: Calendar[];
 }
 
-export function MonthView({ currentDate, events, selectedDate, onSelectDate }: MonthViewProps) {
+export function MonthView({ currentDate, events, selectedDate, onSelectDate, calendars }: MonthViewProps) {
   const textSecondary = useThemeColor({}, 'textSecondary');
 
   const monthGrid = getMonthGrid(currentDate.getFullYear(), currentDate.getMonth());
@@ -53,6 +54,7 @@ export function MonthView({ currentDate, events, selectedDate, onSelectDate }: M
               isSelected={isSelected}
               isToday={isToday}
               onPress={() => onSelectDate(date)}
+              calendars={calendars}
             />
           );
         })}

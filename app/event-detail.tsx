@@ -1,10 +1,13 @@
-import { StyleSheet, View, ScrollView, Pressable, Alert } from 'react-native';
+import { StyleSheet, View, ScrollView, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useCalendar } from '@/contexts/calendar-context';
+import { useAuth } from '@/contexts/auth-context';
+import { AuthError } from '@/utils/api-client';
 import { formatDateRange } from '@/utils/date-helpers';
 import { contacts, currentUser } from '@/data/mock-data';
 
@@ -13,7 +16,9 @@ export default function EventDetailScreen() {
   const params = useLocalSearchParams();
   const eventId = params.id as string;
 
-  const { calendars, events } = useCalendar();
+  const { calendars, events, deleteEvent } = useCalendar();
+  const { logout } = useAuth();
+  const [isDeleting, setIsDeleting] = useState(false);
   const event = events.find(e => e.id === eventId);
   const calendar = event ? calendars.find(c => c.id === event.calendarId) : null;
   const isOwner = event && event.createdBy === currentUser.id;
@@ -52,10 +57,22 @@ export default function EventDetailScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            Alert.alert('Deleted', 'Event deleted', [
-              { text: 'OK', onPress: () => router.back() },
-            ]);
+          onPress: async () => {
+            setIsDeleting(true);
+            try {
+              await deleteEvent(event.calendarId, event.id);
+              router.back();
+            } catch (err) {
+              if (err instanceof AuthError) {
+                Alert.alert('Session Expired', 'Your session has expired. Please log in again.', [
+                  { text: 'OK', onPress: logout },
+                ]);
+                return;
+              }
+              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to delete event');
+            } finally {
+              setIsDeleting(false);
+            }
           },
         },
       ]
@@ -140,16 +157,16 @@ export default function EventDetailScreen() {
         )}
 
         {/* Invitees */}
-        {event.invitedUserIds.length > 0 && (
+        {(event.invitedUserIds?.length ?? 0) > 0 && (
           <View style={[styles.section, { backgroundColor: surfaceColor, borderColor }]}>
             <View style={styles.sectionRow}>
               <IconSymbol name="person.2" size={24} color={tintColor} />
               <View style={styles.sectionContent}>
                 <ThemedText type="defaultSemiBold">
-                  Invitees ({event.invitedUserIds.length})
+                  Invitees ({event.invitedUserIds?.length ?? 0})
                 </ThemedText>
                 <View style={styles.inviteesList}>
-                  {event.invitedUserIds.map(userId => {
+                  {(event.invitedUserIds ?? []).map(userId => {
                     const user = contacts.find(c => c.id === userId);
                     if (!user) return null;
                     return (
@@ -200,7 +217,7 @@ export default function EventDetailScreen() {
         )}
 
         {/* Reminders */}
-        {event.reminders.length > 0 && (
+        {event.reminders?.length > 0 && (
           <View style={[styles.section, { backgroundColor: surfaceColor, borderColor }]}>
             <View style={styles.sectionRow}>
               <IconSymbol name="bell" size={24} color={tintColor} />
@@ -230,12 +247,17 @@ export default function EventDetailScreen() {
         {/* Delete Button - Only for owner */}
         {isOwner && (
           <Pressable
-            style={[styles.deleteButton, { borderColor: dangerColor }]}
+            style={[styles.deleteButton, { borderColor: dangerColor, opacity: isDeleting ? 0.7 : 1 }]}
             onPress={handleDelete}
+            disabled={isDeleting}
           >
-            <ThemedText style={[styles.deleteButtonText, { color: dangerColor }]}>
-              Delete Event
-            </ThemedText>
+            {isDeleting ? (
+              <ActivityIndicator size="small" color={dangerColor} />
+            ) : (
+              <ThemedText style={[styles.deleteButtonText, { color: dangerColor }]}>
+                Delete Event
+              </ThemedText>
+            )}
           </Pressable>
         )}
       </ScrollView>

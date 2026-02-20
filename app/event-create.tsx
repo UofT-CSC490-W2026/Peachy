@@ -1,6 +1,7 @@
-import { StyleSheet, ScrollView, View, Pressable, Alert, Modal } from 'react-native';
+import { StyleSheet, ScrollView, View, Pressable, Alert, Modal, ActivityIndicator } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import Constants from 'expo-constants';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -12,12 +13,16 @@ import { FormDatePicker } from '@/components/form/form-date-picker';
 import { AvailabilityViewer } from '@/components/availability-viewer';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useCalendar } from '@/contexts/calendar-context';
+import { useAuth } from '@/contexts/auth-context';
+import { AuthError } from '@/utils/api-client';
+import { getSlotIndex } from '@/utils/rl-helpers';
 import { contacts } from '@/data/mock-data';
 
 export default function EventCreateScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { calendars, addEvent } = useCalendar();
+  const { calendars, createEvent } = useCalendar();
+  const { user, getIdToken, logout } = useAuth();
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
@@ -28,18 +33,20 @@ export default function EventCreateScreen() {
 
   // Pre-fill from AI params or start empty
   const [title, setTitle] = useState(params.title as string || '');
-  const [selectedCalendar, setSelectedCalendar] = useState(calendars[0]);
+  const [selectedCalendar, setSelectedCalendar] = useState(calendars[0] ?? null);
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [isAllDay, setIsAllDay] = useState(params.isAllDay === 'true');
   const [startDate, setStartDate] = useState(() => {
     if (params.startTime) {
-      return new Date(params.startTime as string);
+      const parsed = new Date(params.startTime as string);
+      if (!isNaN(parsed.getTime())) return parsed;
     }
     return new Date();
   });
   const [endDate, setEndDate] = useState(() => {
     if (params.endTime) {
-      return new Date(params.endTime as string);
+      const parsed = new Date(params.endTime as string);
+      if (!isNaN(parsed.getTime())) return parsed;
     }
     const end = new Date();
     end.setHours(end.getHours() + 1);
@@ -47,6 +54,7 @@ export default function EventCreateScreen() {
   });
   const [location, setLocation] = useState(params.location as string || '');
   const [description, setDescription] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const [invitedUserIds, setInvitedUserIds] = useState<string[]>(() => {
     if (params.inviteeIds) {
       const ids = (params.inviteeIds as string).split(',').filter(id => id.trim());
@@ -65,17 +73,42 @@ export default function EventCreateScreen() {
     inviteeIds: params.inviteeIds as string || '',
   }));
 
+  // Set default calendar once calendars load (handles async context initialization)
+  useEffect(() => {
+    if (!selectedCalendar && calendars.length > 0) {
+      setSelectedCalendar(calendars[0]);
+    }
+  }, [calendars, selectedCalendar]);
+
   // Handle return from user search
   useEffect(() => {
     if (params.selectedUsers) {
-      const userIds = JSON.parse(params.selectedUsers as string);
-      setInvitedUserIds(userIds);
+      try {
+        const parsed: unknown = JSON.parse(params.selectedUsers as string);
+        if (Array.isArray(parsed) && parsed.every((item): item is string => typeof item === 'string')) {
+          setInvitedUserIds(parsed);
+        }
+      } catch {
+        // Ignore malformed param — keep current invitee list
+      }
     }
   }, [params.selectedUsers]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!title.trim()) {
       Alert.alert('Error', 'Please enter an event title');
+      return;
+    }
+    if (!selectedCalendar) {
+      Alert.alert('Error', 'Please select a calendar');
+      return;
+    }
+    if (!isAllDay && endDate <= startDate) {
+      Alert.alert('Invalid Time', 'End time must be after start time');
+      return;
+    }
+    if (isAllDay && endDate < startDate) {
+      Alert.alert('Invalid Date', 'End date must be on or after start date');
       return;
     }
 
@@ -90,35 +123,68 @@ export default function EventCreateScreen() {
       if (invitedUserIds.join(',') !== aiOriginalValues.inviteeIds) aiEditedFields.push('invitedUserIds');
     }
 
-    const newEvent = {
-      id: `event-${Date.now()}`,
-      calendarId: selectedCalendar.id,
-      title: title.trim(),
-      description: description.trim() || undefined,
-      location: location.trim() || undefined,
-      startTime: startDate.toISOString(),
-      endTime: endDate.toISOString(),
-      isAllDay,
-      timezone: 'America/Los_Angeles',
-      status: 'confirmed' as const,
-      reminders: [],
-      invitedUserIds,
-      createdBy: 'user-1',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+    // Parse aiSuggested param (JSON-stringified full AI parse response for RL tracking)
+    const aiSuggested = params.aiSuggested
+      ? (() => { try { return JSON.parse(params.aiSuggested as string) as object; } catch { return undefined; } })()
+      : undefined;
 
-      // Include AI fields if this was AI-generated
-      ...(isAIGenerated && {
-        aiGenerated: true,
-        aiInput,
-        aiEditedFields: aiEditedFields.length > 0 ? aiEditedFields : undefined,
-      }),
-    };
+    setIsSaving(true);
+    try {
+      await createEvent(selectedCalendar.id, {
+        title: title.trim(),
+        description: description.trim() || undefined,
+        location: location.trim() || undefined,
+        startTime: startDate.toISOString(),
+        endTime: endDate.toISOString(),
+        isAllDay,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        invitedUserIds,
+        ...(isAIGenerated && {
+          aiGenerated: true,
+          aiInput,
+          aiSuggested,
+          aiEditedFields: aiEditedFields.length > 0 ? aiEditedFields : undefined,
+        }),
+      });
 
-    addEvent(newEvent);
-    Alert.alert('Success', 'Event created!', [
-      { text: 'OK', onPress: () => router.back() },
-    ]);
+      // Fire-and-forget RL feedback for AI-generated events
+      if (isAIGenerated && user) {
+        const token = await getIdToken();
+        if (token) {
+          const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, string>;
+          const apiUrl = (extra.apiUrl ?? '').replace(/\/$/, '');
+          const aiOriginalStartTime = aiOriginalValues.startTime
+            ? new Date(aiOriginalValues.startTime)
+            : startDate;
+          const suggestedSlotIndex = getSlotIndex(aiOriginalStartTime);
+          const action = aiEditedFields.includes('startTime') ? 'move' : 'accept';
+          const body: Record<string, unknown> = { suggestedSlotIndex, action };
+          if (action === 'move') {
+            body.movedToSlotIndex = getSlotIndex(startDate);
+          }
+          fetch(`${apiUrl}/users/${encodeURIComponent(user.id)}/rl/feedback`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(body),
+          }).catch(() => {}); // fire-and-forget
+        }
+      }
+
+      router.back();
+    } catch (err) {
+      if (err instanceof AuthError) {
+        Alert.alert('Session Expired', 'Your session has expired. Please log in again.', [
+          { text: 'OK', onPress: logout },
+        ]);
+        return;
+      }
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create event');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -146,8 +212,8 @@ export default function EventCreateScreen() {
 
         <FormField label="Calendar">
           <FormPickerRow
-            label={selectedCalendar.name}
-            value={selectedCalendar.type}
+            label={selectedCalendar?.name ?? 'Select Calendar'}
+            value={selectedCalendar?.type ?? ''}
             onPress={() => setShowCalendarPicker(true)}
           />
         </FormField>
@@ -161,11 +227,11 @@ export default function EventCreateScreen() {
         </FormField>
 
         <FormField label="Start Time">
-          <FormDatePicker date={startDate} onDateChange={setStartDate} />
+          <FormDatePicker date={startDate} onDateChange={setStartDate} isAllDay={isAllDay} />
         </FormField>
 
         <FormField label="End Time">
-          <FormDatePicker date={endDate} onDateChange={setEndDate} />
+          <FormDatePicker date={endDate} onDateChange={setEndDate} isAllDay={isAllDay} />
         </FormField>
 
         <FormField label="Location">
@@ -247,11 +313,16 @@ export default function EventCreateScreen() {
           </Pressable>
           <Pressable
             onPress={handleSave}
-            style={[styles.button, styles.saveButton, { backgroundColor: tintColor }]}
+            disabled={isSaving}
+            style={[styles.button, styles.saveButton, { backgroundColor: tintColor, opacity: isSaving ? 0.7 : 1 }]}
           >
-            <ThemedText style={styles.saveButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
-              Create Event
-            </ThemedText>
+            {isSaving ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <ThemedText style={styles.saveButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
+                Create Event
+              </ThemedText>
+            )}
           </Pressable>
         </View>
       </ScrollView>
@@ -302,7 +373,7 @@ export default function EventCreateScreen() {
                       </ThemedText>
                     </View>
                   </View>
-                  {selectedCalendar.id === calendar.id && (
+                  {selectedCalendar?.id === calendar.id && (
                     <IconSymbol name="checkmark.circle.fill" size={24} color={tintColor} />
                   )}
                 </Pressable>

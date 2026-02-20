@@ -1,4 +1,4 @@
-import { StyleSheet, ScrollView, View, Pressable, Alert } from 'react-native';
+import { StyleSheet, ScrollView, View, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { useState } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
@@ -8,6 +8,8 @@ import { FormField } from '@/components/form/form-field';
 import { FormTextInput } from '@/components/form/form-text-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useCalendar } from '@/contexts/calendar-context';
+import { useAuth } from '@/contexts/auth-context';
+import { AuthError } from '@/utils/api-client';
 import { calendarColors } from '@/constants/theme';
 import { CalendarType } from '@/types';
 import { contacts } from '@/data/mock-data';
@@ -17,7 +19,8 @@ export default function CalendarSettingsScreen() {
   const params = useLocalSearchParams();
   const calendarId = params.id as string;
 
-  const { calendars } = useCalendar();
+  const { calendars, updateCalendar, deleteCalendar } = useCalendar();
+  const { logout } = useAuth();
   const calendar = calendars.find(cal => cal.id === calendarId);
 
   const tintColor = useThemeColor({}, 'tint');
@@ -31,6 +34,7 @@ export default function CalendarSettingsScreen() {
   const [selectedColor, setSelectedColor] = useState(calendar?.color || calendarColors[0]);
   const [calendarType, setCalendarType] = useState<CalendarType>(calendar?.type || 'personal');
   const [memberIds, setMemberIds] = useState<string[]>(calendar?.memberIds || []);
+  const [isSaving, setIsSaving] = useState(false);
 
   if (!calendar) {
     return (
@@ -40,18 +44,32 @@ export default function CalendarSettingsScreen() {
     );
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim()) {
       Alert.alert('Error', 'Please enter a calendar name');
       return;
     }
 
-    // In real app, this would update via API
-    Alert.alert(
-      'Success',
-      'Calendar settings updated!',
-      [{ text: 'OK', onPress: () => router.back() }]
-    );
+    setIsSaving(true);
+    try {
+      await updateCalendar(calendarId, {
+        name: name.trim(),
+        color: selectedColor,
+        description: description.trim() || undefined,
+        type: calendarType,
+      });
+      router.back();
+    } catch (err) {
+      if (err instanceof AuthError) {
+        Alert.alert('Session Expired', 'Your session has expired. Please log in again.', [
+          { text: 'OK', onPress: logout },
+        ]);
+        return;
+      }
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save calendar settings');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDelete = () => {
@@ -63,11 +81,19 @@ export default function CalendarSettingsScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            // In real app, this would delete via API
-            Alert.alert('Deleted', 'Calendar deleted', [
-              { text: 'OK', onPress: () => router.back() },
-            ]);
+          onPress: async () => {
+            router.back();
+            try {
+              await deleteCalendar(calendarId);
+            } catch (err) {
+              if (err instanceof AuthError) {
+                Alert.alert('Session Expired', 'Your session has expired. Please log in again.', [
+                  { text: 'OK', onPress: logout },
+                ]);
+                return;
+              }
+              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to delete calendar');
+            }
           },
         },
       ]
@@ -236,10 +262,15 @@ export default function CalendarSettingsScreen() {
 
         {/* Save Button */}
         <Pressable
-          style={[styles.saveButton, { backgroundColor: tintColor }]}
+          style={[styles.saveButton, { backgroundColor: tintColor, opacity: isSaving ? 0.7 : 1 }]}
           onPress={handleSave}
+          disabled={isSaving}
         >
-          <ThemedText style={styles.saveButtonText}>Save Changes</ThemedText>
+          {isSaving ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <ThemedText style={styles.saveButtonText}>Save Changes</ThemedText>
+          )}
         </Pressable>
 
         {/* Delete Button */}

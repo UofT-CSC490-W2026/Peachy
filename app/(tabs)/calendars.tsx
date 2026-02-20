@@ -151,15 +151,16 @@ export default function CalendarsScreen() {
                   events={visibleEvents}
                   selectedDate={selectedDate}
                   onSelectDate={setSelectedDate}
+                  calendars={calendars}
                 />
-                <EventList events={selectedDayEvents} selectedDate={selectedDate} />
+                <EventList events={selectedDayEvents} selectedDate={selectedDate} calendars={calendars} />
               </ScrollView>
             )}
             {currentView === 'week' && (
-              <WeekView currentDate={currentDate} events={visibleEvents} />
+              <WeekView currentDate={currentDate} events={visibleEvents} calendars={calendars} />
             )}
             {currentView === 'day' && (
-              <DayView currentDate={selectedDate} events={visibleEvents} />
+              <DayView currentDate={selectedDate} events={visibleEvents} calendars={calendars} />
             )}
           </View>
         </>
