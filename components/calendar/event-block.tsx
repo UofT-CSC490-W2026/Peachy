@@ -9,9 +9,11 @@ interface EventBlockProps {
   top: number;
   height: number;
   onPress: () => void;
+  left?: number;
+  width?: number;
 }
 
-export function EventBlock({ event, color, top, height, onPress }: EventBlockProps) {
+export function EventBlock({ event, color, top, height, onPress, left, width }: EventBlockProps) {
   const startTime = new Date(event.startTime);
 
   return (
@@ -25,6 +27,9 @@ export function EventBlock({ event, color, top, height, onPress }: EventBlockPro
           top,
           height: Math.max(height, 30),
         },
+        width !== undefined
+          ? { left: `${left ?? 0}%`, width: `${width}%` }
+          : { left: 0, right: 0 },
       ]}
     >
       <ThemedText
@@ -52,8 +57,6 @@ export function EventBlock({ event, color, top, height, onPress }: EventBlockPro
 const styles = StyleSheet.create({
   block: {
     position: 'absolute',
-    left: 0,
-    right: 0,
     borderLeftWidth: 3,
     borderRadius: 4,
     padding: 4,

@@ -2,15 +2,16 @@ import { StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { TimeGrid } from './time-grid';
-import { CalendarEvent } from '@/types';
+import { Calendar, CalendarEvent } from '@/types';
 import { getWeekDates, getEventsForDay, getDayName, isSameDay } from '@/utils/date-helpers';
 
 interface WeekViewProps {
   currentDate: Date;
   events: CalendarEvent[];
+  calendars: Calendar[];
 }
 
-export function WeekView({ currentDate, events }: WeekViewProps) {
+export function WeekView({ currentDate, events, calendars }: WeekViewProps) {
   const tintColor = useThemeColor({}, 'tint');
   const textSecondary = useThemeColor({}, 'textSecondary');
 
@@ -59,7 +60,7 @@ export function WeekView({ currentDate, events }: WeekViewProps) {
       </View>
 
       {/* Time grid */}
-      <TimeGrid events={events} columns={7} getColumnEvents={getColumnEvents} />
+      <TimeGrid events={events} calendars={calendars} columns={7} getColumnEvents={getColumnEvents} />
     </View>
   );
 }

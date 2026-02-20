@@ -3,29 +3,58 @@ import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { EventBlock } from './event-block';
-import { CalendarEvent } from '@/types';
+import { Calendar, CalendarEvent } from '@/types';
 import { getEventTopOffset, getEventHeight } from '@/utils/date-helpers';
-import { getCalendarColor } from '@/utils/calendar-helpers';
+
+function computeEventLayout(
+  events: CalendarEvent[]
+): Record<string, { left: number; width: number }> {
+  if (!events.length) return {};
+  const sorted = [...events].sort(
+    (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+  );
+  const eventCol: Record<string, number> = {};
+  const colEnds: number[] = [];
+
+  for (const ev of sorted) {
+    const start = new Date(ev.startTime).getTime();
+    const end = new Date(ev.endTime).getTime();
+    let col = colEnds.findIndex(e => e <= start);
+    if (col === -1) { col = colEnds.length; colEnds.push(end); }
+    else { colEnds[col] = Math.max(colEnds[col], end); }
+    eventCol[ev.id] = col;
+  }
+
+  const total = colEnds.length;
+  return Object.fromEntries(
+    events.map(ev => [
+      ev.id,
+      { left: (eventCol[ev.id] / total) * 100, width: 100 / total },
+    ])
+  );
+}
 
 interface TimeGridProps {
   events: CalendarEvent[];
+  calendars: Calendar[];
   columns?: number; // 1 for day view, 7 for week view
   getColumnEvents?: (columnIndex: number) => CalendarEvent[];
 }
 
-export function TimeGrid({ events, columns = 1, getColumnEvents }: TimeGridProps) {
+export function TimeGrid({ events, calendars, columns = 1, getColumnEvents }: TimeGridProps) {
   const router = useRouter();
   const borderColor = useThemeColor({}, 'borderLight');
   const textSecondary = useThemeColor({}, 'textSecondary');
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
-  const renderEvent = (event: CalendarEvent, columnIndex: number = 0) => {
+  const renderEvent = (event: CalendarEvent, layout?: { left: number; width: number }) => {
     const startTime = new Date(event.startTime);
     const endTime = new Date(event.endTime);
     const top = getEventTopOffset(startTime);
     const height = getEventHeight(startTime, endTime);
-    const color = getCalendarColor(event.calendarId);
+    const cal = calendars.find(c => c.id === event.calendarId);
+    const color = cal?.color ?? '#FF8C6B';
 
     return (
       <EventBlock
@@ -34,6 +63,8 @@ export function TimeGrid({ events, columns = 1, getColumnEvents }: TimeGridProps
         color={color}
         top={top}
         height={height}
+        left={layout?.left}
+        width={layout?.width}
         onPress={() => {
           router.push({
             pathname: '/event-detail',
@@ -66,6 +97,7 @@ export function TimeGrid({ events, columns = 1, getColumnEvents }: TimeGridProps
         <View style={styles.columnsContainer}>
           {Array.from({ length: columns }, (_, columnIndex) => {
             const columnEvents = getColumnEvents ? getColumnEvents(columnIndex) : events;
+            const layout = computeEventLayout(columnEvents);
 
             return (
               <View
@@ -81,7 +113,7 @@ export function TimeGrid({ events, columns = 1, getColumnEvents }: TimeGridProps
                     style={[styles.hourSlot, { borderColor }]}
                   />
                 ))}
-                {columnEvents.map(event => renderEvent(event, columnIndex))}
+                {columnEvents.map(event => renderEvent(event, layout[event.id]))}
               </View>
             );
           })}
