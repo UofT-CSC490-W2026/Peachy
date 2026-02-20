@@ -157,7 +157,7 @@ export default function EventDetailScreen() {
         )}
 
         {/* Invitees */}
-        {event.invitedUserIds.length > 0 && (
+        {(event.invitedUserIds?.length ?? 0) > 0 && (
           <View style={[styles.section, { backgroundColor: surfaceColor, borderColor }]}>
             <View style={styles.sectionRow}>
               <IconSymbol name="person.2" size={24} color={tintColor} />

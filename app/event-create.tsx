@@ -33,7 +33,7 @@ export default function EventCreateScreen() {
 
   // Pre-fill from AI params or start empty
   const [title, setTitle] = useState(params.title as string || '');
-  const [selectedCalendar, setSelectedCalendar] = useState(calendars[0]);
+  const [selectedCalendar, setSelectedCalendar] = useState(calendars[0] ?? null);
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [isAllDay, setIsAllDay] = useState(params.isAllDay === 'true');
   const [startDate, setStartDate] = useState(() => {
@@ -71,6 +71,13 @@ export default function EventCreateScreen() {
     inviteeIds: params.inviteeIds as string || '',
   }));
 
+  // Set default calendar once calendars load (handles async context initialization)
+  useEffect(() => {
+    if (!selectedCalendar && calendars.length > 0) {
+      setSelectedCalendar(calendars[0]);
+    }
+  }, [calendars, selectedCalendar]);
+
   // Handle return from user search
   useEffect(() => {
     if (params.selectedUsers) {
@@ -82,6 +89,10 @@ export default function EventCreateScreen() {
   const handleSave = async () => {
     if (!title.trim()) {
       Alert.alert('Error', 'Please enter an event title');
+      return;
+    }
+    if (!selectedCalendar) {
+      Alert.alert('Error', 'Please select a calendar');
       return;
     }
 
@@ -185,8 +196,8 @@ export default function EventCreateScreen() {
 
         <FormField label="Calendar">
           <FormPickerRow
-            label={selectedCalendar.name}
-            value={selectedCalendar.type}
+            label={selectedCalendar?.name ?? 'Select Calendar'}
+            value={selectedCalendar?.type ?? ''}
             onPress={() => setShowCalendarPicker(true)}
           />
         </FormField>
@@ -346,7 +357,7 @@ export default function EventCreateScreen() {
                       </ThemedText>
                     </View>
                   </View>
-                  {selectedCalendar.id === calendar.id && (
+                  {selectedCalendar?.id === calendar.id && (
                     <IconSymbol name="checkmark.circle.fill" size={24} color={tintColor} />
                   )}
                 </Pressable>
