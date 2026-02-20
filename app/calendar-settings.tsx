@@ -82,9 +82,9 @@ export default function CalendarSettingsScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
+            router.back();
             try {
               await deleteCalendar(calendarId);
-              router.back();
             } catch (err) {
               if (err instanceof AuthError) {
                 Alert.alert('Session Expired', 'Your session has expired. Please log in again.', [
