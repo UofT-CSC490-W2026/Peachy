@@ -3,7 +3,7 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
+import { HomeIcon, CalendarIcon, ChatIcon, ProfileIcon } from '@/components/ui/tab-icons';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -31,36 +31,45 @@ const styles = StyleSheet.create({
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
-  const tabBarBg = Colors[colorScheme ?? 'light'].surface;
+  const theme = Colors[colorScheme ?? 'light'];
+  const tabBarBg = theme.surface;
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].text,
+        tabBarActiveTintColor: theme.text,
+        tabBarInactiveTintColor: theme.icon,
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarShowLabel: false,
+        tabBarStyle: {
+          borderTopWidth: StyleSheet.hairlineWidth,
+        },
       }}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          tabBarIcon: ({ focused }) => (
+            <HomeIcon color={theme.text} size={24} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="calendars"
         options={{
           title: 'Calendars',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="calendar" color={color} />,
+          tabBarIcon: ({ focused }) => (
+            <CalendarIcon color={theme.text} bg={tabBarBg} size={24} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="create"
         options={{
           title: 'Create',
-          tabBarIcon: ({ color }) => (
-            <View style={[styles.plusSquare, { backgroundColor: color }]}>
+          tabBarIcon: ({ focused }) => (
+            <View style={[styles.plusSquare, { backgroundColor: theme.text, opacity: focused ? 1 : 0.35 }]}>
               <View style={[styles.plusH, { backgroundColor: tabBarBg }]} />
               <View style={[styles.plusV, { backgroundColor: tabBarBg }]} />
             </View>
@@ -71,14 +80,18 @@ export default function TabLayout() {
         name="chat"
         options={{
           title: 'Chat',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bubble.left.fill" color={color} />,
+          tabBarIcon: ({ focused }) => (
+            <ChatIcon color={theme.text} bg={tabBarBg} size={24} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
+          tabBarIcon: ({ focused }) => (
+            <ProfileIcon color={theme.text} size={24} focused={focused} />
+          ),
         }}
       />
     </Tabs>
