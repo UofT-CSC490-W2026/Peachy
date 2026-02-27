@@ -8,12 +8,17 @@ import { FormField } from '@/components/form/form-field';
 import { FormTextInput } from '@/components/form/form-text-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { currentUser } from '@/data/mock-data';
+import { useInterests } from '@/hooks/use-interests';
+import { INTEREST_CATEGORIES } from '@/constants/interests';
 
 export default function ProfileEditScreen() {
   const router = useRouter();
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
+  const textColor = useThemeColor({}, 'text');
+  const textSecondary = useThemeColor({}, 'textSecondary');
+  const { selected, toggle } = useInterests();
 
   const [name, setName] = useState(currentUser.name);
   const [username, setUsername] = useState(currentUser.username);
@@ -122,6 +127,41 @@ export default function ProfileEditScreen() {
           </ThemedText>
         </View>
 
+        {/* Interests */}
+        <View style={styles.interestsSection}>
+          <ThemedText style={[styles.interestsHeading, { color: textSecondary }]}>INTERESTS</ThemedText>
+          {INTEREST_CATEGORIES.map((category) => (
+            <View key={category.id} style={styles.interestCategory}>
+              <ThemedText style={[styles.interestCategoryLabel, { color: textSecondary }]}>
+                {category.label}
+              </ThemedText>
+              <View style={styles.tagsWrap}>
+                {category.tags.map((tag) => {
+                  const isSelected = selected.has(tag.id);
+                  return (
+                    <Pressable
+                      key={tag.id}
+                      style={[
+                        styles.tag,
+                        isSelected
+                          ? { backgroundColor: tintColor, borderColor: tintColor }
+                          : { backgroundColor: surfaceColor, borderColor },
+                      ]}
+                      onPress={() => toggle(tag.id)}
+                    >
+                      <ThemedText
+                        style={[styles.tagLabel, { color: isSelected ? '#fff' : textColor }]}
+                      >
+                        {tag.label}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ))}
+        </View>
+
         {/* Action Buttons */}
         <View style={styles.actionButtons}>
           <Pressable
@@ -224,6 +264,39 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  interestsSection: {
+    marginTop: 28,
+    marginBottom: 8,
+  },
+  interestsHeading: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 16,
+  },
+  interestCategory: {
+    marginBottom: 16,
+  },
+  interestCategoryLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  tagsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tag: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  tagLabel: {
+    fontSize: 13,
     fontWeight: '600',
   },
 });
