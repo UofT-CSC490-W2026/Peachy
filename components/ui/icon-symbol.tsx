@@ -36,6 +36,7 @@ const MAPPING = {
   'note.text': 'description',
   'checkmark.circle.fill': 'check-circle',
   'sparkles': 'auto-awesome',
+  'line.horizontal.3': 'menu',
 } as IconMapping;
 
 /**

@@ -1,4 +1,5 @@
 import { StyleSheet, View, ScrollView, Pressable, Image } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
@@ -7,16 +8,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useAuth } from '@/contexts/auth-context';
 import { useInterests } from '@/hooks/use-interests';
 import { INTEREST_CATEGORIES } from '@/constants/interests';
-
-function HamburgerIcon({ color }: { color: string }) {
-  return (
-    <View style={styles.hamburger}>
-      <View style={[styles.hamburgerBar, { backgroundColor: color }]} />
-      <View style={[styles.hamburgerBar, { backgroundColor: color }]} />
-      <View style={[styles.hamburgerBar, { backgroundColor: color }]} />
-    </View>
-  );
-}
+import { IconSymbol } from '@/components/ui/icon-symbol';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -25,6 +17,7 @@ export default function ProfileScreen() {
   const borderColor = useThemeColor({}, 'border');
   const surfaceColor = useThemeColor({}, 'surface');
   const tintColor = useThemeColor({}, 'tint');
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { selected } = useInterests();
 
@@ -48,11 +41,11 @@ export default function ProfileScreen() {
   return (
     <ThemedView style={styles.container}>
       {/* Top bar */}
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
         <View style={styles.topBarSpacer} />
-        <ThemedText style={styles.usernameTop}>@{user?.username}</ThemedText>
+        <ThemedText style={styles.usernameTop} numberOfLines={1}>@{user?.username}</ThemedText>
         <Pressable style={styles.menuButton} onPress={() => router.push('/settings')}>
-          <HamburgerIcon color={textColor} />
+          <IconSymbol name="line.horizontal.3" size={22} color={textColor} />
         </Pressable>
       </View>
 
@@ -129,14 +122,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 60,
     paddingBottom: 12,
   },
   topBarSpacer: { width: 40 },
-  usernameTop: { fontSize: 17, fontWeight: '700' },
-  menuButton: { width: 40, alignItems: 'flex-end', justifyContent: 'center' },
-  hamburger: { gap: 5, justifyContent: 'center' },
-  hamburgerBar: { width: 22, height: 2, borderRadius: 1 },
+  usernameTop: { fontSize: 17, fontWeight: '700', flex: 1, textAlign: 'center' },
+  menuButton: { width: 40, alignItems: 'center', justifyContent: 'center' },
   scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
   profileHeader: {
     flexDirection: 'row',
