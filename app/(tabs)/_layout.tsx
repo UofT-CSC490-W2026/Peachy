@@ -69,7 +69,7 @@ export default function TabLayout() {
         options={{
           title: 'Create',
           tabBarIcon: ({ focused }) => (
-            <View style={[styles.plusSquare, { backgroundColor: theme.text, opacity: focused ? 1 : 0.35 }]}>
+            <View style={[styles.plusSquare, { backgroundColor: focused ? theme.tint : theme.icon }]}>
               <View style={[styles.plusH, { backgroundColor: tabBarBg }]} />
               <View style={[styles.plusV, { backgroundColor: tabBarBg }]} />
             </View>

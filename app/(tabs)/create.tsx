@@ -4,11 +4,11 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { useState } from 'react';
 
+import { AiInputBar } from '@/components/ai-input-bar';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -22,15 +22,19 @@ const SUGGESTIONS = [
 ];
 
 export default function CreateScreen() {
-  const [input, setInput] = useState('');
+  const [chipValue, setChipValue] = useState('');
+  const [chipKey, setChipKey] = useState(0);
 
   const tintColor = useThemeColor({}, 'tint');
-  const textColor = useThemeColor({}, 'text');
   const textSecondary = useThemeColor({}, 'textSecondary');
   const surfaceColor = useThemeColor({}, 'surface');
   const surfaceSecondary = useThemeColor({}, 'surfaceSecondary');
   const borderColor = useThemeColor({}, 'border');
-  const iconColor = useThemeColor({}, 'icon');
+
+  const handleChipPress = (s: string) => {
+    setChipValue(s);
+    setChipKey((k) => k + 1);
+  };
 
   return (
     <KeyboardAvoidingView
@@ -80,7 +84,7 @@ export default function CreateScreen() {
               <Pressable
                 key={s}
                 style={[styles.chip, { borderColor, backgroundColor: surfaceColor }]}
-                onPress={() => setInput(s)}
+                onPress={() => handleChipPress(s)}
               >
                 <ThemedText style={[styles.chipText, { color: textSecondary }]}>{s}</ThemedText>
               </Pressable>
@@ -88,28 +92,7 @@ export default function CreateScreen() {
           </View>
         </ScrollView>
 
-        {/* Input bar */}
-        <View style={[styles.inputWrap, { backgroundColor: surfaceColor, borderTopColor: borderColor }]}>
-          <View style={[styles.inputRow, { borderColor }]}>
-            <Pressable style={styles.micBtn}>
-              <IconSymbol name="mic.fill" size={20} color={iconColor} />
-            </Pressable>
-            <TextInput
-              style={[styles.input, { color: textColor }]}
-              placeholder="Ask Peachy AI..."
-              placeholderTextColor={iconColor}
-              value={input}
-              onChangeText={setInput}
-              multiline
-              returnKeyType="send"
-            />
-            {input.trim().length > 0 && (
-              <Pressable style={[styles.sendBtn, { backgroundColor: tintColor }]}>
-                <IconSymbol name="arrow.up.circle.fill" size={28} color="#fff" />
-              </Pressable>
-            )}
-          </View>
-        </View>
+        <AiInputBar key={chipKey} initialValue={chipValue} />
       </ThemedView>
     </KeyboardAvoidingView>
   );
@@ -195,40 +178,5 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontSize: 14,
-  },
-  inputWrap: {
-    borderTopWidth: 1,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: Platform.OS === 'ios' ? 12 : 16,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 24,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  micBtn: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 4,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    paddingVertical: 4,
-    maxHeight: 100,
-  },
-  sendBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 4,
   },
 });
