@@ -8,10 +8,14 @@ import { useAuth } from '@/contexts/auth-context';
 import { ApiError, AuthError } from '@/utils/api-client';
 import type { AIParseResult } from '@/utils/ai-parser';
 
-export function AiInputBar() {
+interface AiInputBarProps {
+  initialValue?: string;
+}
+
+export function AiInputBar({ initialValue }: AiInputBarProps = {}) {
   const router = useRouter();
   const { getIdToken } = useAuth();
-  const [inputText, setInputText] = useState('');
+  const [inputText, setInputText] = useState(initialValue ?? '');
   const [isLoading, setIsLoading] = useState(false);
   const surfaceColor = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
