@@ -15,6 +15,7 @@ export default function InterestsScreen() {
   const surfaceColor = useThemeColor({}, 'surface');
   const tintColor = useThemeColor({}, 'tint');
   const { selected, toggle } = useInterests();
+  const MAX_INTERESTS = 20;
 
   return (
     <ThemedView style={styles.container}>
@@ -27,7 +28,7 @@ export default function InterestsScreen() {
       </View>
 
       <ThemedText style={[styles.subtitle, { color: textSecondary }]}>
-        Select what you're into — others with the same interests can find you.
+        Select what you're into — others with the same interests can find you. ({selected.size}/{MAX_INTERESTS})
       </ThemedText>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -39,6 +40,7 @@ export default function InterestsScreen() {
             <View style={styles.tagsWrap}>
               {category.tags.map((tag) => {
                 const isSelected = selected.has(tag.id);
+                const isDisabled = !isSelected && selected.size >= MAX_INTERESTS;
                 return (
                   <Pressable
                     key={tag.id}
@@ -47,8 +49,12 @@ export default function InterestsScreen() {
                       isSelected
                         ? { backgroundColor: tintColor, borderColor: tintColor }
                         : { backgroundColor: surfaceColor, borderColor },
+                      isDisabled && { opacity: 0.4 },
                     ]}
-                    onPress={() => toggle(tag.id)}
+                    onPress={() => {
+                      if (isDisabled) return;
+                      toggle(tag.id);
+                    }}
                   >
                     <ThemedText
                       style={[

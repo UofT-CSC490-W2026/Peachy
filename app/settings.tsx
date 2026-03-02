@@ -108,7 +108,7 @@ export default function SettingsScreen() {
             icon="person.crop.circle"
             title="Edit Profile"
             subtitle="Update your name, photo, and bio"
-            onPress={() => { router.back(); router.push('/profile-edit'); }}
+            onPress={() => router.push('/profile-edit')}
           />
           <Row
             icon="bell.fill"
@@ -260,7 +260,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     textTransform: 'uppercase',
   },
-  spacer: { height: 8 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -280,23 +279,6 @@ const styles = StyleSheet.create({
   rowContent: { flex: 1 },
   rowTitle: { fontSize: 15, fontWeight: '600' },
   rowSubtitle: { fontSize: 12, marginTop: 1 },
-  segmentedControl: {
-    flexDirection: 'row',
-    borderRadius: 10,
-    borderWidth: 1,
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  segment: {
-    flex: 1,
-    paddingVertical: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  segmentLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
   logoutButton: {
     marginTop: 32,
     paddingVertical: 14,

@@ -1,6 +1,6 @@
 import { StyleSheet, View, ScrollView, Pressable, Image } from 'react-native';
+import { useMemo } from 'react';
 import { useRouter } from 'expo-router';
-import Svg, { Rect } from 'react-native-svg';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -10,11 +10,11 @@ import { INTEREST_CATEGORIES } from '@/constants/interests';
 
 function HamburgerIcon({ color }: { color: string }) {
   return (
-    <Svg width={22} height={16} viewBox="0 0 22 16">
-      <Rect x="0" y="0" width="22" height="2" rx="1" fill={color} />
-      <Rect x="0" y="7" width="22" height="2" rx="1" fill={color} />
-      <Rect x="0" y="14" width="22" height="2" rx="1" fill={color} />
-    </Svg>
+    <View style={styles.hamburger}>
+      <View style={[styles.hamburgerBar, { backgroundColor: color }]} />
+      <View style={[styles.hamburgerBar, { backgroundColor: color }]} />
+      <View style={[styles.hamburgerBar, { backgroundColor: color }]} />
+    </View>
   );
 }
 
@@ -28,16 +28,22 @@ export default function ProfileScreen() {
   const { user } = useAuth();
   const { selected } = useInterests();
 
-  // Filter categories to only those with at least one selected tag, max 20 total
-  let remaining = 20;
-  const categoriesWithTags = INTEREST_CATEGORIES
-    .map((cat) => ({
-      ...cat,
-      tags: cat.tags.filter((t) => selected.has(t.id)),
-    }))
-    .filter((cat) => cat.tags.length > 0);
-
-  const hasInterests = categoriesWithTags.length > 0;
+  const { categoriesWithTags, hasInterests } = useMemo(() => {
+    let remaining = 20;
+    const cats = INTEREST_CATEGORIES
+      .map((cat) => ({
+        ...cat,
+        tags: cat.tags.filter((t) => selected.has(t.id)),
+      }))
+      .filter((cat) => cat.tags.length > 0)
+      .map((cat) => {
+        const visible = cat.tags.slice(0, remaining);
+        remaining -= visible.length;
+        return { ...cat, tags: visible };
+      })
+      .filter((cat) => cat.tags.length > 0);
+    return { categoriesWithTags: cats, hasInterests: cats.length > 0 };
+  }, [selected]);
 
   return (
     <ThemedView style={styles.container}>
@@ -90,17 +96,13 @@ export default function ProfileScreen() {
         {hasInterests && (
           <View style={styles.interestsSection}>
             <ThemedText style={[styles.interestsHeading, { color: textSecondary }]}>INTERESTS</ThemedText>
-            {categoriesWithTags.map((cat) => {
-              const visible = cat.tags.slice(0, remaining);
-              remaining -= visible.length;
-              if (visible.length === 0) return null;
-              return (
+            {categoriesWithTags.map((cat) => (
                 <View key={cat.id} style={styles.category}>
                   <ThemedText style={[styles.categoryLabel, { color: textSecondary }]}>
                     {cat.label}
                   </ThemedText>
                   <View style={styles.tagsWrap}>
-                    {visible.map((tag) => (
+                    {cat.tags.map((tag) => (
                       <View
                         key={tag.id}
                         style={[styles.tag, { backgroundColor: `${tintColor}18`, borderColor: `${tintColor}40` }]}
@@ -112,8 +114,7 @@ export default function ProfileScreen() {
                     ))}
                   </View>
                 </View>
-              );
-            })}
+            ))}
           </View>
         )}
       </ScrollView>
@@ -134,6 +135,8 @@ const styles = StyleSheet.create({
   topBarSpacer: { width: 40 },
   usernameTop: { fontSize: 17, fontWeight: '700' },
   menuButton: { width: 40, alignItems: 'flex-end', justifyContent: 'center' },
+  hamburger: { gap: 5, justifyContent: 'center' },
+  hamburgerBar: { width: 22, height: 2, borderRadius: 1 },
   scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
   profileHeader: {
     flexDirection: 'row',

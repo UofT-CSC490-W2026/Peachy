@@ -32,6 +32,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       const [themePair, sizePair] = pairs;
       if (themePair[1]) setThemePreferenceState(themePair[1] as ThemePreference);
       if (sizePair[1]) setTextSizeState(sizePair[1] as TextSize);
+    }).catch(() => {
+      // Use defaults if storage is unavailable
     });
   }, []);
 

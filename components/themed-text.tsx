@@ -28,7 +28,13 @@ export function ThemedText({
   const linkColor = useThemeColor({}, 'tint');
   const { fontScale } = useTheme();
 
-  const scaledSize = Math.round(BASE_SIZES[type] * fontScale);
+  // Resolve the effective base font size: prefer inline fontSize from style if provided
+  const flatStyle = StyleSheet.flatten(style);
+  const baseSize = (flatStyle?.fontSize as number | undefined) ?? BASE_SIZES[type];
+  const scaledSize = Math.round(baseSize * fontScale);
+  // Scale lineHeight proportionally if provided inline, otherwise use type default
+  const baseLineHeight = flatStyle?.lineHeight as number | undefined;
+  const scaledLineHeight = baseLineHeight != null ? Math.round(baseLineHeight * fontScale) : undefined;
 
   return (
     <Text
@@ -39,8 +45,9 @@ export function ThemedText({
         type === 'defaultSemiBold' ? styles.defaultSemiBold : undefined,
         type === 'subtitle' ? styles.subtitle : undefined,
         type === 'link' ? [styles.link, { color: linkColor }] : undefined,
-        { fontSize: scaledSize },
         style,
+        { fontSize: scaledSize },
+        scaledLineHeight != null ? { lineHeight: scaledLineHeight } : undefined,
       ]}
       {...rest}
     />
