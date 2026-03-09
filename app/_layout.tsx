@@ -8,6 +8,7 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { CalendarProvider } from '@/contexts/calendar-context';
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
+import { ThemeProvider as AppThemeProvider } from '@/contexts/theme-context';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -58,6 +59,9 @@ function RootNavigator() {
           <Stack.Screen name="chat-detail" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="user-search" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="profile-edit" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="settings" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="appearance" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="interests" options={{ presentation: 'modal', headerShown: false }} />
         </Stack>
         <StatusBar style="auto" />
       </ThemeProvider>
@@ -68,7 +72,9 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <RootNavigator />
+      <AppThemeProvider>
+        <RootNavigator />
+      </AppThemeProvider>
     </AuthProvider>
   );
 }
