@@ -1,4 +1,4 @@
-export type PendingItemType = 'calendar_invite' | 'event_invite' | 'event_update';
+export type PendingItemType = 'calendar_invite' | 'event_invite' | 'event_update' | 'friend_request';
 export type PendingItemStatus = 'pending' | 'accepted' | 'declined';
 
 export interface PendingItem {
