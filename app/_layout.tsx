@@ -9,6 +9,8 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { CalendarProvider } from '@/contexts/calendar-context';
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
 import { ThemeProvider as AppThemeProvider } from '@/contexts/theme-context';
+import { FriendsProvider } from '@/contexts/friends-context';
+import { ChatProvider } from '@/contexts/chat-context';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -45,8 +47,10 @@ function RootNavigator() {
 
   return (
     <CalendarProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack>
+      <FriendsProvider>
+        <ChatProvider>
+          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+            <Stack>
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
@@ -61,10 +65,13 @@ function RootNavigator() {
           <Stack.Screen name="profile-edit" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="settings" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="appearance" options={{ presentation: 'modal', headerShown: false }} />
-          <Stack.Screen name="interests" options={{ presentation: 'modal', headerShown: false }} />
-        </Stack>
-        <StatusBar style="auto" />
-      </ThemeProvider>
+              <Stack.Screen name="friends" options={{ presentation: 'modal', headerShown: false }} />
+              <Stack.Screen name="interests" options={{ presentation: 'modal', headerShown: false }} />
+            </Stack>
+            <StatusBar style="auto" />
+          </ThemeProvider>
+        </ChatProvider>
+      </FriendsProvider>
     </CalendarProvider>
   );
 }
