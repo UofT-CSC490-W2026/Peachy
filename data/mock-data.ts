@@ -434,7 +434,6 @@ const workChatLastMessage: ChatMessage = {
   eventId: 'event-13',
   inviteStatus: 'pending',
   createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(), // 6 hours ago
-  readBy: ['user-2'],
 };
 
 const familyChatLastMessage: ChatMessage = {
@@ -446,7 +445,6 @@ const familyChatLastMessage: ChatMessage = {
   eventId: 'event-4',
   inviteStatus: 'pending',
   createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 hours ago
-  readBy: ['user-4', currentUser.id],
 };
 
 const dmLastMessage: ChatMessage = {
@@ -468,6 +466,7 @@ export const mockChats: Chat[] = [
     participantIds: [currentUser.id, 'user-2', 'user-3'],
     lastMessage: workChatLastMessage,
     unreadCount: 2,
+    status: 'active',
     createdAt: new Date().toISOString(),
     updatedAt: workChatLastMessage.createdAt,
   },
@@ -479,6 +478,7 @@ export const mockChats: Chat[] = [
     participantIds: [currentUser.id, 'user-4'],
     lastMessage: familyChatLastMessage,
     unreadCount: 0,
+    status: 'active',
     createdAt: new Date().toISOString(),
     updatedAt: familyChatLastMessage.createdAt,
   },
@@ -489,6 +489,7 @@ export const mockChats: Chat[] = [
     participantIds: [currentUser.id, 'user-3'],
     lastMessage: dmLastMessage,
     unreadCount: 1,
+    status: 'active',
     createdAt: new Date().toISOString(),
     updatedAt: dmLastMessage.createdAt,
   },
