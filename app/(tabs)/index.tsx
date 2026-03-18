@@ -12,7 +12,7 @@ import { AiInputBar } from '@/components/ai-input-bar';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { calendars, visibleEvents, pendingItems, acceptEventInvite, declineEventInvite } = useCalendar();
+  const { calendars, visibleEvents, pendingItems, acceptPendingItem, declinePendingItem } = useCalendar();
   const tintColor = useThemeColor({}, 'tint');
 
   // Filter to show only pending items
@@ -21,31 +21,27 @@ export default function HomeScreen() {
     [pendingItems]
   );
 
-  const handleAccept = (itemId: string) => {
+  const handleAccept = async (itemId: string) => {
     const item = pendingItems.find(i => i.id === itemId);
     if (!item) return;
 
-    // For event invites, use the synced accept function
-    if (item.type === 'event_invite' && item.eventId) {
-      acceptEventInvite(item.eventId);
-      Alert.alert('Success', 'Event invitation accepted');
-    } else {
-      // For other types (calendar invites, etc.), handle separately
-      Alert.alert('Success', 'Item accepted successfully');
+    try {
+      await acceptPendingItem(itemId, (item as any).sk);
+      Alert.alert('Success', 'Accepted');
+    } catch {
+      Alert.alert('Error', 'Failed to accept');
     }
   };
 
-  const handleDecline = (itemId: string) => {
+  const handleDecline = async (itemId: string) => {
     const item = pendingItems.find(i => i.id === itemId);
     if (!item) return;
 
-    // For event invites, use the synced decline function
-    if (item.type === 'event_invite' && item.eventId) {
-      declineEventInvite(item.eventId);
-      Alert.alert('Declined', 'Event invitation declined');
-    } else {
-      // For other types (calendar invites, etc.), handle separately
+    try {
+      await declinePendingItem(itemId, (item as any).sk);
       Alert.alert('Declined', 'Item declined');
+    } catch {
+      Alert.alert('Error', 'Failed to decline');
     }
   };
 
