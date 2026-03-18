@@ -6,6 +6,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useAuth } from '@/contexts/auth-context';
+import { useFriends } from '@/contexts/friends-context';
 import { useInterests } from '@/hooks/use-interests';
 import { INTEREST_CATEGORIES } from '@/constants/interests';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -19,6 +20,7 @@ export default function ProfileScreen() {
   const tintColor = useThemeColor({}, 'tint');
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { friends } = useFriends();
   const { selected } = useInterests();
 
   const { categoriesWithTags, hasInterests } = useMemo(() => {
@@ -62,16 +64,12 @@ export default function ProfileScreen() {
             </View>
           )}
 
-          <View style={styles.statsRow}>
+          <Pressable style={styles.statsRow} onPress={() => router.push('/friends')}>
             <View style={styles.statItem}>
-              <ThemedText style={styles.statNumber}>0</ThemedText>
-              <ThemedText style={[styles.statLabel, { color: textSecondary }]}>followers</ThemedText>
+              <ThemedText style={styles.statNumber}>{friends.length}</ThemedText>
+              <ThemedText style={[styles.statLabel, { color: textSecondary }]}>friends</ThemedText>
             </View>
-            <View style={styles.statItem}>
-              <ThemedText style={styles.statNumber}>0</ThemedText>
-              <ThemedText style={[styles.statLabel, { color: textSecondary }]}>following</ThemedText>
-            </View>
-          </View>
+          </Pressable>
         </View>
 
         {/* Name */}
