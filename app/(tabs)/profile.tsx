@@ -21,7 +21,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { friends } = useFriends();
-  const { selected } = useInterests();
+  const { selected } = useInterests(user?.interests);
 
   const { categoriesWithTags, hasInterests } = useMemo(() => {
     let remaining = 20;
