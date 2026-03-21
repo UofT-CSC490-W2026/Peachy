@@ -106,9 +106,31 @@ npm run ios            # Start on iOS
 npm run android        # Start on Android
 npm run web            # Start on web
 npm run lint           # Run ESLint
+npm test               # Run Jest unit tests
+npm run test:watch     # Jest in watch mode
+npm run test:coverage  # Jest with coverage report (utils/ only)
 ```
 
-No test runner is configured yet.
+## Testing
+
+**Framework:** Jest 29 + `@types/jest`, using `babel-preset-expo` for TypeScript transforms via `babel-jest`. No `ts-jest` or `jest-expo` needed for pure utility tests.
+
+**Config:** `jest.config.js` at project root — `react-native` preset, `@/*` path alias mapped via `moduleNameMapper`, explicit `testPathIgnorePatterns` to exclude `node_modules` and `.expo`.
+
+**TypeScript:** Jest globals (`describe`, `it`, `expect`) are scoped to test files only via `__tests__/tsconfig.json`. The root `tsconfig.json` is intentionally unchanged so Jest globals don't leak into production source files.
+
+**Test files** live in `__tests__/` (flat, no mirrored subdirectory structure):
+
+```
+__tests__/
+  tsconfig.json            # Extends root tsconfig + adds "types": ["jest"]
+  date-helpers.test.ts     # 33 tests — getMonthGrid, getWeekDates, formatTime, isSameDay, etc.
+  validation.test.ts       # 24 tests — all 7 validation functions (email, password, name, etc.)
+  calendar-helpers.test.ts # 13 tests — CALENDAR_COLORS map + getCalendarColor fallback
+  rl-helpers.test.ts       # 12 tests — getSlotIndex formula, 168-slot range, minute-ignoring
+```
+
+**Scope:** Unit tests for pure utility functions only. Component tests and integration tests are not yet configured. Add new test files to `__tests__/` following the same flat convention.
 
 ## Code Conventions
 

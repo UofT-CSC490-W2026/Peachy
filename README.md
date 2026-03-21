@@ -28,6 +28,11 @@ npm run android     # Android emulator (dev environment)
 npm run web         # Web browser (dev environment)
 npm run lint        # Run ESLint
 
+# Testing
+npm test                # Run all unit tests
+npm run test:watch      # Run tests in watch mode (re-runs on file save)
+npm run test:coverage   # Run tests with coverage report
+
 # Production environment
 npm run start:prod
 npm run ios:prod
@@ -256,6 +261,27 @@ eas build --profile production --platform all
 | **Logging** | Verbose (`devLog()` enabled) | Minimal (production-ready) |
 | **Backend** | Future: Dev AWS resources | Future: Prod AWS resources |
 | **Side-by-side** | ✅ Can install both apps | ✅ Can install both apps |
+
+## Testing
+
+Unit tests use **Jest 29** with `babel-preset-expo` for TypeScript transforms (no `ts-jest` needed).
+
+```bash
+npm test                  # Run all tests (82 tests across 4 suites)
+npm run test:watch        # Watch mode — re-runs affected tests on save
+npm run test:coverage     # Coverage report for utils/
+```
+
+Tests live in `__tests__/` and cover the pure utility modules:
+
+| File | What it tests |
+|------|---------------|
+| `date-helpers.test.ts` | Grid generation, time formatting, event filtering, offset/height calc |
+| `validation.test.ts` | Email, password, name, and form validation |
+| `calendar-helpers.test.ts` | Calendar color mapping and fallback behavior |
+| `rl-helpers.test.ts` | Thompson Sampling slot index formula |
+
+**Adding new tests:** Create `*.test.ts` files in `__tests__/`. Import project modules using the `@/` alias (e.g. `import { formatTime } from '@/utils/date-helpers'`).
 
 ## Key Files
 
