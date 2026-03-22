@@ -3,6 +3,7 @@ export type PendingItemStatus = 'pending' | 'accepted' | 'declined';
 
 export interface PendingItem {
   id: string;
+  sk?: string;           // DynamoDB sort key — used for efficient accept/decline lookups
   type: PendingItemType;
   eventId?: string;      // Reference to event (fetch full details separately)
   calendarId?: string;   // Reference to calendar (fetch full details separately)

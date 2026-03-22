@@ -12,40 +12,27 @@ import { AiInputBar } from '@/components/ai-input-bar';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { calendars, visibleEvents, pendingItems, acceptEventInvite, declineEventInvite } = useCalendar();
+  const { calendars, visibleEvents, pendingItems, acceptPendingItem, declinePendingItem } = useCalendar();
   const tintColor = useThemeColor({}, 'tint');
 
-  // Filter to show only pending items
-  const displayedPendingItems = useMemo(() =>
-    pendingItems.filter(item => item.status === 'pending'),
-    [pendingItems]
-  );
+  // All items fetched are already 'pending' status — no need to filter
+  const displayedPendingItems = useMemo(() => pendingItems, [pendingItems]);
 
-  const handleAccept = (itemId: string) => {
-    const item = pendingItems.find(i => i.id === itemId);
-    if (!item) return;
-
-    // For event invites, use the synced accept function
-    if (item.type === 'event_invite' && item.eventId) {
-      acceptEventInvite(item.eventId);
-      Alert.alert('Success', 'Event invitation accepted');
-    } else {
-      // For other types (calendar invites, etc.), handle separately
-      Alert.alert('Success', 'Item accepted successfully');
+  const handleAccept = async (itemId: string) => {
+    try {
+      await acceptPendingItem(itemId);
+      Alert.alert('Success', 'Invitation accepted');
+    } catch {
+      Alert.alert('Error', 'Failed to accept invitation. Please try again.');
     }
   };
 
-  const handleDecline = (itemId: string) => {
-    const item = pendingItems.find(i => i.id === itemId);
-    if (!item) return;
-
-    // For event invites, use the synced decline function
-    if (item.type === 'event_invite' && item.eventId) {
-      declineEventInvite(item.eventId);
-      Alert.alert('Declined', 'Event invitation declined');
-    } else {
-      // For other types (calendar invites, etc.), handle separately
-      Alert.alert('Declined', 'Item declined');
+  const handleDecline = async (itemId: string) => {
+    try {
+      await declinePendingItem(itemId);
+      Alert.alert('Declined', 'Invitation declined');
+    } catch {
+      Alert.alert('Error', 'Failed to decline invitation. Please try again.');
     }
   };
 

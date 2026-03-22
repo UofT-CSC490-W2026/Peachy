@@ -83,6 +83,7 @@ types/
 utils/
   date-helpers.ts              # 16+ date utility functions (including grouping)
   calendar-helpers.ts          # Calendar color mapping and utilities
+  notifications.ts             # Push notification registration and foreground handler
 data/
   mock-data.ts                 # Mock calendars, events, users, chats, pending items
 constants/
@@ -181,7 +182,7 @@ __tests__/
   - **Chat data:** `chats`, `getChatMessages(chatId)`
   - **User data:** `getUser(userId)` — fetches user by ID for enriching pending items with sender names
   - **Calendar actions:** `toggleCalendarVisibility`, `addEvent`, `addCalendar`
-  - **Event invite actions:** `acceptEventInvite(eventId)`, `declineEventInvite(eventId)` — syncs status across pending items and chat messages
+  - **Pending item actions (API-backed):** `acceptPendingItem(itemId)`, `declinePendingItem(itemId)` — calls API then syncs status across local state and chat messages; `refreshPendingItems()` for manual refresh
   - **Chat actions:** `updateChatMessage(chatId, messageId, updates)` — also syncs with pending items when invite status changes
 - **Status syncing:** Accepting/declining event invites updates both pending items and chat messages automatically
 - **Pending item enrichment:** UI components use `getUser()`, `events`, and `calendars` to derive display data (title, description) from references
@@ -252,7 +253,7 @@ __tests__/
   - Calendar invitations (shared calendar feature showcase)
   - Event invitations (tap to view event details)
   - Event updates
-  - Accept/Decline actions with confirmation
+  - Accept/Decline actions with confirmation — calls real API (`POST /pending-items/{id}/accept|decline`) with optimistic update
   - **Status syncing:** Accepting/declining event invites syncs status to chat messages automatically
   - Shows only items with `status === 'pending'`
   - Color-coded icons by item type
@@ -347,6 +348,17 @@ __tests__/
   - **Support:** Help & Support, About
 - **Log Out:** With confirmation dialog
 - All settings with icons and descriptive subtitles
+
+### Push Notifications
+- **Permission request:** On first login, app requests push notification permission from OS
+- **Token registration:** Expo push token stored in backend via `PUT /users/me/push-token` after login
+- **Foreground notifications:** In-app banner shown when notification arrives while app is open
+- **Android channel:** `default` channel configured with Peachy pink color and vibration
+- **Notification tap → navigation:**
+  - `event_invite` type → opens `/event-detail` screen directly
+  - All others → navigates to Home tab
+- **Push sent on:** Event creation with `invitedUserIds` (fire-and-forget from Lambda)
+- **Graceful degradation:** If `expo-notifications` not installed or permission denied, app works normally; users still see pending items on Home screen
 
 ### Event Management
 - **View events** filtered by visible calendars
@@ -553,7 +565,8 @@ All mock data uses realistic timestamps relative to "now" for testing time-based
 - [ ] Add optimistic updates for sent messages
 - [ ] Implement message polling (5s interval when chat is open)
 - [ ] Add loading states for message fetching
-- [ ] Refresh pending items when accepting/declining
+- [x] Refresh pending items when accepting/declining
+- [x] Pending items: load from `GET /pending-items`, accept/decline via API, push notifications on invite
 - [ ] Refresh calendar data when navigating to Calendars screen
 - [ ] Add offline queue for failed message sends
 

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback, ReactNode } from 'react';
 import { Calendar, CalendarEvent, CalendarType, PendingItem, Chat, ChatMessage, User } from '@/types';
-import { mockPendingItems, mockChats, currentUser, contacts } from '@/data/mock-data';
+import { mockChats, currentUser, contacts } from '@/data/mock-data';
 import { useAuth } from '@/contexts/auth-context';
 import { createApiClient, AuthError } from '@/utils/api-client';
 
@@ -53,9 +53,10 @@ interface CalendarContextType {
   createEvent: (calendarId: string, data: CreateEventInput) => Promise<CalendarEvent>;
   updateEvent: (calendarId: string, eventId: string, data: Partial<CalendarEvent>) => Promise<void>;
   deleteEvent: (calendarId: string, eventId: string) => Promise<void>;
-  // Pending items / invite actions (still mocked)
-  acceptEventInvite: (eventId: string) => void;
-  declineEventInvite: (eventId: string) => void;
+  // Pending items / invite actions
+  refreshPendingItems: () => Promise<void>;
+  acceptPendingItem: (itemId: string) => Promise<void>;
+  declinePendingItem: (itemId: string) => Promise<void>;
   // Chat actions (still mocked)
   getChatMessages: (chatId: string) => ChatMessage[];
   updateChatMessage: (chatId: string, messageId: string, updates: Partial<ChatMessage>) => void;
@@ -78,7 +79,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   // ── Still-mocked state ────────────────────────────────────────────────────
-  const [pendingItems, setPendingItems] = useState<PendingItem[]>(mockPendingItems);
+  const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [chats] = useState<Chat[]>(mockChats);
   const [chatMessages, setChatMessages] = useState<Record<string, ChatMessage[]>>(() => {
     const initial: Record<string, ChatMessage[]> = {};
@@ -132,16 +133,42 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     }
   }, [apiClient]);
 
+  // Fetch pending items from the API (only 'pending' status)
+  const loadPendingItems = useCallback(async () => {
+    try {
+      const result = await apiClient.get<{ items: any[] }>('pending-items?status=pending');
+      const items: PendingItem[] = result.items.map(item => ({
+        id: item.id,
+        sk: item.sk,
+        type: item.type,
+        status: item.status,
+        fromUserId: item.fromUserId,
+        toUserId: item.toUserId,
+        calendarId: item.calendarId,
+        eventId: item.eventId,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      }));
+      setPendingItems(items);
+    } catch (err) {
+      if (err instanceof AuthError) return;
+      // Non-fatal — pending items are supplementary
+      console.warn('Failed to load pending items:', err);
+    }
+  }, [apiClient]);
+
   // Load data when user logs in; clear when user logs out
   useEffect(() => {
     if (user) {
       loadData();
+      loadPendingItems();
     } else {
       setCalendars([]);
       setEvents([]);
+      setPendingItems([]);
       setError(null);
     }
-  }, [user, loadData]);
+  }, [user, loadData, loadPendingItems]);
 
   // ── Calendar mutations ────────────────────────────────────────────────────
 
@@ -292,35 +319,69 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     }
   }, [apiClient]);
 
-  // ── Invite actions (still mocked — pending items not yet in backend) ───────
+  // ── Pending item actions (API-backed) ────────────────────────────────────
 
-  const updateEventInviteStatus = useCallback((
-    eventId: string,
-    status: 'accepted' | 'declined'
-  ) => {
-    setPendingItems(prev =>
-      prev.map(item =>
-        item.eventId === eventId ? { ...item, status } : item
-      )
-    );
-    setChatMessages(prev => {
-      const updated = { ...prev };
-      Object.keys(updated).forEach(chatId => {
-        updated[chatId] = updated[chatId].map(msg =>
-          msg.eventId === eventId ? { ...msg, inviteStatus: status } : msg
-        );
+  const refreshPendingItems = useCallback(async () => {
+    await loadPendingItems();
+  }, [loadPendingItems]);
+
+  const acceptPendingItem = useCallback(async (itemId: string) => {
+    const item = pendingItems.find(i => i.id === itemId);
+    if (!item) return;
+
+    // Optimistic update — remove from the pending list
+    setPendingItems(prev => prev.filter(i => i.id !== itemId));
+
+    // Sync any matching chat messages to 'accepted'
+    if (item.eventId) {
+      setChatMessages(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(chatId => {
+          updated[chatId] = updated[chatId].map(msg =>
+            msg.eventId === item.eventId ? { ...msg, inviteStatus: 'accepted' as const } : msg
+          );
+        });
+        return updated;
       });
-      return updated;
-    });
-  }, []);
+    }
 
-  const acceptEventInvite = useCallback((eventId: string) => {
-    updateEventInviteStatus(eventId, 'accepted');
-  }, [updateEventInviteStatus]);
+    try {
+      await apiClient.post(`pending-items/${itemId}/accept`, { sk: item.sk });
+    } catch (err) {
+      // Revert optimistic update on failure
+      setPendingItems(prev => [...prev, { ...item, status: 'pending' }]);
+      throw err;
+    }
+  }, [apiClient, pendingItems]);
 
-  const declineEventInvite = useCallback((eventId: string) => {
-    updateEventInviteStatus(eventId, 'declined');
-  }, [updateEventInviteStatus]);
+  const declinePendingItem = useCallback(async (itemId: string) => {
+    const item = pendingItems.find(i => i.id === itemId);
+    if (!item) return;
+
+    // Optimistic update — remove from the pending list
+    setPendingItems(prev => prev.filter(i => i.id !== itemId));
+
+    // Sync any matching chat messages to 'declined'
+    if (item.eventId) {
+      setChatMessages(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(chatId => {
+          updated[chatId] = updated[chatId].map(msg =>
+            msg.eventId === item.eventId ? { ...msg, inviteStatus: 'declined' as const } : msg
+          );
+        });
+        return updated;
+      });
+    }
+
+    try {
+      await apiClient.post(`pending-items/${itemId}/decline`, { sk: item.sk });
+    } catch (err) {
+      // Revert optimistic update on failure
+      setPendingItems(prev => [...prev, { ...item, status: 'pending' }]);
+      throw err;
+    }
+  }, [apiClient, pendingItems]);
 
   // ── Chat actions (still mocked) ───────────────────────────────────────────
 
@@ -386,8 +447,9 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         createEvent,
         updateEvent,
         deleteEvent,
-        acceptEventInvite,
-        declineEventInvite,
+        refreshPendingItems,
+        acceptPendingItem,
+        declinePendingItem,
         getChatMessages,
         updateChatMessage,
       }}

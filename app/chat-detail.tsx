@@ -16,7 +16,7 @@ export default function ChatDetailScreen() {
   const chatName = params.name as string || 'Chat';
   const chatType = params.type as string || 'direct';
 
-  const { getChatMessages, acceptEventInvite, declineEventInvite } = useCalendar();
+  const { getChatMessages, pendingItems, acceptPendingItem, declinePendingItem } = useCalendar();
 
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');
@@ -88,34 +88,58 @@ export default function ChatDetailScreen() {
     });
   };
 
-  const handleAcceptInvite = (messageId: string) => {
+  const handleAcceptInvite = async (messageId: string) => {
     const message = messages.find(msg => msg.id === messageId);
     if (!message?.eventId) return;
 
-    // Use context function to sync status everywhere
-    acceptEventInvite(message.eventId);
+    // Find the matching pending item by eventId to get its itemId
+    const pendingItem = pendingItems.find(i => i.eventId === message.eventId && i.status === 'pending');
 
     // Update local state for immediate UI feedback
-    setMessages(messages.map(msg =>
+    setMessages(prev => prev.map(msg =>
       msg.id === messageId ? { ...msg, inviteStatus: 'accepted' as const } : msg
     ));
 
-    Alert.alert('Success', 'Event invitation accepted');
+    if (pendingItem) {
+      try {
+        await acceptPendingItem(pendingItem.id);
+        Alert.alert('Success', 'Event invitation accepted');
+      } catch {
+        // Revert local message state
+        setMessages(prev => prev.map(msg =>
+          msg.id === messageId ? { ...msg, inviteStatus: 'pending' as const } : msg
+        ));
+        Alert.alert('Error', 'Failed to accept invitation. Please try again.');
+      }
+    } else {
+      Alert.alert('Success', 'Event invitation accepted');
+    }
   };
 
-  const handleDeclineInvite = (messageId: string) => {
+  const handleDeclineInvite = async (messageId: string) => {
     const message = messages.find(msg => msg.id === messageId);
     if (!message?.eventId) return;
 
-    // Use context function to sync status everywhere
-    declineEventInvite(message.eventId);
+    const pendingItem = pendingItems.find(i => i.eventId === message.eventId && i.status === 'pending');
 
     // Update local state for immediate UI feedback
-    setMessages(messages.map(msg =>
+    setMessages(prev => prev.map(msg =>
       msg.id === messageId ? { ...msg, inviteStatus: 'declined' as const } : msg
     ));
 
-    Alert.alert('Declined', 'Event invitation declined');
+    if (pendingItem) {
+      try {
+        await declinePendingItem(pendingItem.id);
+        Alert.alert('Declined', 'Event invitation declined');
+      } catch {
+        setMessages(prev => prev.map(msg =>
+          msg.id === messageId ? { ...msg, inviteStatus: 'pending' as const } : msg
+        ));
+        Alert.alert('Error', 'Failed to decline invitation. Please try again.');
+      }
+    } else {
+      Alert.alert('Declined', 'Event invitation declined');
+    }
   };
 
   const renderMessage = ({ item, index }: { item: ChatMessage; index: number }) => {

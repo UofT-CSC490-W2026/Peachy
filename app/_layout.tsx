@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useSegments, useRouter } from 'expo-router';
@@ -9,6 +9,11 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { CalendarProvider } from '@/contexts/calendar-context';
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
 import { ThemeProvider as AppThemeProvider } from '@/contexts/theme-context';
+import { registerForPushNotifications, configureNotificationHandler } from '@/utils/notifications';
+import { createApiClient } from '@/utils/api-client';
+
+// Configure foreground notification display at module load time
+configureNotificationHandler();
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -16,9 +21,10 @@ export const unstable_settings = {
 
 function RootNavigator() {
   const colorScheme = useColorScheme();
-  const { isAuthenticated, isRestoring } = useAuth();
+  const { isAuthenticated, isRestoring, getIdToken } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const pushRegisteredRef = useRef(false);
 
   // All hooks must run unconditionally before any conditional return.
   useEffect(() => {
@@ -27,11 +33,50 @@ function RootNavigator() {
     const inAuthGroup = segments[0] === '(auth)';
 
     if (!isAuthenticated && !inAuthGroup) {
+      pushRegisteredRef.current = false; // Reset on logout
       router.replace('/(auth)/welcome');
     } else if (isAuthenticated && inAuthGroup) {
       router.replace('/(tabs)');
     }
   }, [isAuthenticated, isRestoring, segments, router]);
+
+  // Register for push notifications once after login
+  useEffect(() => {
+    if (!isAuthenticated || isRestoring || pushRegisteredRef.current) return;
+
+    pushRegisteredRef.current = true;
+    const apiClient = createApiClient(getIdToken);
+
+    registerForPushNotifications().then(token => {
+      if (!token) return;
+      apiClient.put('users/me/push-token', { pushToken: token }).catch(err => {
+        console.warn('Failed to register push token:', err);
+      });
+    });
+  }, [isAuthenticated, isRestoring, getIdToken]);
+
+  // Handle notification taps — navigate to Home where pending items are shown
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let subscription: { remove: () => void } | null = null;
+
+    import('expo-notifications').then(Notifications => {
+      subscription = Notifications.addNotificationResponseReceivedListener(response => {
+        const data = response.notification.request.content.data as Record<string, string> | undefined;
+
+        if (data?.type === 'event_invite' && data.eventId) {
+          // Deep-link directly to the event detail
+          router.push({ pathname: '/event-detail', params: { id: data.eventId } });
+        } else {
+          // Default: go to Home tab where pending items are listed
+          router.replace('/(tabs)');
+        }
+      });
+    }).catch(() => {/* expo-notifications not installed */});
+
+    return () => { subscription?.remove(); };
+  }, [isAuthenticated, router]);
 
   // S13: Render a neutral loading screen while the session is being restored so
   // that protected tab content never briefly flashes before the redirect fires.
