@@ -37,7 +37,7 @@ export default function ChatDetailScreen() {
   const isMessageRequest = messageRequests.some(r => r.id === chatId);
 
   const loadMessages = useCallback(async () => {
-    if (!chatId) return;
+    if (!chatId || isMessageRequest) return;
     setIsLoadingMessages(true);
     try {
       const data = await getChatMessages(chatId);
@@ -47,7 +47,7 @@ export default function ChatDetailScreen() {
     } finally {
       setIsLoadingMessages(false);
     }
-  }, [chatId, getChatMessages]);
+  }, [chatId, isMessageRequest, getChatMessages]);
 
   useEffect(() => {
     loadMessages();
