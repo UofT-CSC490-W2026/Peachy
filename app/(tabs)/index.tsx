@@ -15,11 +15,8 @@ export default function HomeScreen() {
   const { calendars, visibleEvents, pendingItems, acceptPendingItem, declinePendingItem } = useCalendar();
   const tintColor = useThemeColor({}, 'tint');
 
-  // Filter to show only pending items
-  const displayedPendingItems = useMemo(() =>
-    pendingItems.filter(item => item.status === 'pending'),
-    [pendingItems]
-  );
+  // All items fetched are already 'pending' status — no need to filter
+  const displayedPendingItems = useMemo(() => pendingItems, [pendingItems]);
 
   const handleAccept = async (itemId: string) => {
     const item = pendingItems.find(i => i.id === itemId);
@@ -27,9 +24,9 @@ export default function HomeScreen() {
 
     try {
       await acceptPendingItem(itemId, (item as any).sk);
-      Alert.alert('Success', 'Accepted');
+      Alert.alert('Success', 'Invitation accepted');
     } catch {
-      Alert.alert('Error', 'Failed to accept');
+      Alert.alert('Error', 'Failed to accept invitation. Please try again.');
     }
   };
 
@@ -39,9 +36,9 @@ export default function HomeScreen() {
 
     try {
       await declinePendingItem(itemId, (item as any).sk);
-      Alert.alert('Declined', 'Item declined');
+      Alert.alert('Declined', 'Invitation declined');
     } catch {
-      Alert.alert('Error', 'Failed to decline');
+      Alert.alert('Error', 'Failed to decline invitation. Please try again.');
     }
   };
 

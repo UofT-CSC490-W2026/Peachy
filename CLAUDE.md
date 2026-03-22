@@ -83,6 +83,7 @@ types/
 utils/
   date-helpers.ts              # 16+ date utility functions (including grouping)
   calendar-helpers.ts          # Calendar color mapping and utilities
+  notifications.ts             # Push notification registration and foreground handler
 data/
   mock-data.ts                 # Mock calendars, events, users, chats, pending items
 constants/
@@ -106,9 +107,48 @@ npm run ios            # Start on iOS
 npm run android        # Start on Android
 npm run web            # Start on web
 npm run lint           # Run ESLint
+npm test               # Run Jest unit tests
+npm run test:watch     # Jest in watch mode
+npm run test:coverage  # Jest with coverage report (utils/ only)
 ```
 
-No test runner is configured yet.
+## Testing
+
+**Framework:** Jest 29 + `@testing-library/react-native` + `@testing-library/jest-native`, using `babel-preset-expo` for TypeScript transforms via `babel-jest`.
+
+**Config:** `jest.config.js` at project root:
+- `react-native` preset
+- `@/*` path alias via `moduleNameMapper`
+- `AsyncStorage` mocked via `moduleNameMapper` (prevents native module crash)
+- `expo-symbols` mocked via `moduleNameMapper` (prevents SF Symbols native crash)
+- `setupFilesAfterEnv` runs `@testing-library/jest-native/extend-expect` for custom matchers
+- Coverage collected from `utils/**/*.ts` and `components/**/*.tsx`
+
+**TypeScript:** Jest globals (`describe`, `it`, `expect`) are scoped to test files only via `__tests__/tsconfig.json`. The root `tsconfig.json` is intentionally unchanged so Jest globals don't leak into production source files.
+
+**Test structure:**
+
+```
+__tests__/
+  components/
+    ai-input-bar.test.tsx    # 4 tests — renders, initial value, empty state, typing
+    themed-text.test.tsx     # 6 tests — all text types, testID passthrough
+    themed-view.test.tsx     # 3 tests — children, testID, multiple children
+  utils/
+    date-helpers.test.ts     # 33 tests — getMonthGrid, getWeekDates, formatTime, isSameDay, etc.
+    validation.test.ts       # 24 tests — all 7 validation functions (email, password, name, etc.)
+    calendar-helpers.test.ts # 13 tests — CALENDAR_COLORS map + getCalendarColor fallback
+    rl-helpers.test.ts       # 12 tests — getSlotIndex formula, 168-slot range, minute-ignoring
+  test-utils.tsx             # Shared renderWithProviders() wrapper (ThemeProvider)
+  tsconfig.json              # Extends root tsconfig + adds "types": ["jest"]
+__mocks__/
+  expo-symbols.tsx           # Stub for expo-symbols (SymbolView)
+  icon-symbol.tsx            # Stub for IconSymbol component
+```
+
+**Shared test helper:** Import `renderWithProviders` from `../test-utils` instead of `@testing-library/react-native` for any component that uses theme hooks. Add additional providers to `AllProviders` in `test-utils.tsx` as needed (e.g. `CalendarProvider`, `AuthProvider`).
+
+**CI/CD:** Tests run automatically on push/PR to `main` or `dev` via `.github/workflows/test.yml`. Can also be triggered manually from the GitHub Actions tab. Coverage report is uploaded as a build artifact (retained 14 days).
 
 ## Code Conventions
 
@@ -159,7 +199,7 @@ No test runner is configured yet.
   - **Chat data:** `chats`, `getChatMessages(chatId)`
   - **User data:** `getUser(userId)` — fetches user by ID for enriching pending items with sender names
   - **Calendar actions:** `toggleCalendarVisibility`, `addEvent`, `addCalendar`
-  - **Event invite actions:** `acceptEventInvite(eventId)`, `declineEventInvite(eventId)` — syncs status across pending items and chat messages
+  - **Pending item actions (API-backed):** `acceptPendingItem(itemId)`, `declinePendingItem(itemId)` — calls API then syncs status across local state and chat messages; `refreshPendingItems()` for manual refresh
   - **Chat actions:** `updateChatMessage(chatId, messageId, updates)` — also syncs with pending items when invite status changes
 - **Status syncing:** Accepting/declining event invites updates both pending items and chat messages automatically
 - **Pending item enrichment:** UI components use `getUser()`, `events`, and `calendars` to derive display data (title, description) from references
@@ -230,7 +270,7 @@ No test runner is configured yet.
   - Calendar invitations (shared calendar feature showcase)
   - Event invitations (tap to view event details)
   - Event updates
-  - Accept/Decline actions with confirmation
+  - Accept/Decline actions with confirmation — calls real API (`POST /pending-items/{id}/accept|decline`) with optimistic update
   - **Status syncing:** Accepting/declining event invites syncs status to chat messages automatically
   - Shows only items with `status === 'pending'`
   - Color-coded icons by item type
@@ -325,6 +365,17 @@ No test runner is configured yet.
   - **Support:** Help & Support, About
 - **Log Out:** With confirmation dialog
 - All settings with icons and descriptive subtitles
+
+### Push Notifications
+- **Permission request:** On first login, app requests push notification permission from OS
+- **Token registration:** Expo push token stored in backend via `PUT /users/me/push-token` after login
+- **Foreground notifications:** In-app banner shown when notification arrives while app is open
+- **Android channel:** `default` channel configured with Peachy pink color and vibration
+- **Notification tap → navigation:**
+  - `event_invite` type → opens `/event-detail` screen directly
+  - All others → navigates to Home tab
+- **Push sent on:** Event creation with `invitedUserIds` (fire-and-forget from Lambda)
+- **Graceful degradation:** If `expo-notifications` not installed or permission denied, app works normally; users still see pending items on Home screen
 
 ### Event Management
 - **View events** filtered by visible calendars
@@ -531,7 +582,8 @@ All mock data uses realistic timestamps relative to "now" for testing time-based
 - [ ] Add optimistic updates for sent messages
 - [ ] Implement message polling (5s interval when chat is open)
 - [ ] Add loading states for message fetching
-- [ ] Refresh pending items when accepting/declining
+- [x] Refresh pending items when accepting/declining
+- [x] Pending items: load from `GET /pending-items`, accept/decline via API, push notifications on invite
 - [ ] Refresh calendar data when navigating to Calendars screen
 - [ ] Add offline queue for failed message sends
 

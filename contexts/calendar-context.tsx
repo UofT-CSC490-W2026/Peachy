@@ -130,16 +130,42 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     }
   }, [apiClient]);
 
+  // Fetch pending items from the API (only 'pending' status)
+  const loadPendingItems = useCallback(async () => {
+    try {
+      const result = await apiClient.get<{ items: any[] }>('pending-items?status=pending');
+      const items: PendingItem[] = result.items.map(item => ({
+        id: item.id,
+        sk: item.sk,
+        type: item.type,
+        status: item.status,
+        fromUserId: item.fromUserId,
+        toUserId: item.toUserId,
+        calendarId: item.calendarId,
+        eventId: item.eventId,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      }));
+      setPendingItems(items);
+    } catch (err) {
+      if (err instanceof AuthError) return;
+      // Non-fatal — pending items are supplementary
+      console.warn('Failed to load pending items:', err);
+    }
+  }, [apiClient]);
+
   // Load data when user logs in; clear when user logs out
   useEffect(() => {
     if (user) {
       loadData();
+      loadPendingItems();
     } else {
       setCalendars([]);
       setEvents([]);
+      setPendingItems([]);
       setError(null);
     }
-  }, [user, loadData]);
+  }, [user, loadData, loadPendingItems]);
 
   // ── Calendar mutations ────────────────────────────────────────────────────
 

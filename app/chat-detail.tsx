@@ -107,6 +107,8 @@ export default function ChatDetailScreen() {
     });
   };
 
+
+
   const renderMessage = ({ item, index }: { item: ChatMessage; index: number }) => {
     const isCurrentUser = item.senderId === currentUserId;
     const prevMessage = index > 0 ? messages[index - 1] : null;

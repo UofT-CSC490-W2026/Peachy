@@ -14,17 +14,16 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useCalendar } from '@/contexts/calendar-context';
 import { useAuth } from '@/contexts/auth-context';
 import { AuthError } from '@/utils/api-client';
-import { contacts, currentUser } from '@/data/mock-data';
 
 export default function EventEditScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const eventId = params.id as string;
 
-  const { calendars, events, updateEvent } = useCalendar();
-  const { logout } = useAuth();
+  const { calendars, events, updateEvent, getUser } = useCalendar();
+  const { logout, user } = useAuth();
   const event = events.find(e => e.id === eventId);
-  const isOwner = event && event.createdBy === currentUser.id;
+  const isOwner = event && user && event.createdBy === user.id;
 
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');
@@ -226,7 +225,7 @@ export default function EventEditScreen() {
           {invitedUserIds.length > 0 && (
             <View style={styles.inviteesList}>
               {invitedUserIds.map(userId => {
-                const user = contacts.find(c => c.id === userId);
+                const user = getUser(userId);
                 if (!user) return null;
                 return (
                   <View key={userId} style={[styles.inviteeChip, { backgroundColor: surfaceColor, borderColor }]}>

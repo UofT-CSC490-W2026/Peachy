@@ -28,6 +28,11 @@ npm run android     # Android emulator (dev environment)
 npm run web         # Web browser (dev environment)
 npm run lint        # Run ESLint
 
+# Testing
+npm test                # Run all unit tests
+npm run test:watch      # Run tests in watch mode (re-runs on file save)
+npm run test:coverage   # Run tests with coverage report
+
 # Production environment
 npm run start:prod
 npm run ios:prod
@@ -106,6 +111,18 @@ Peachy/
 │   └── environment.ts            # Environment configuration (dev/prod)
 │
 ├── assets/images/                # App icons + branding
+│
+├── __tests__/                    # Jest test files
+│   ├── components/               # Component tests
+│   ├── utils/                    # Utility unit tests
+│   ├── test-utils.tsx            # Shared renderWithProviders() helper
+│   └── tsconfig.json             # Jest type declarations
+├── __mocks__/                    # Jest manual mocks
+│   ├── expo-symbols.tsx          # Stub for SF Symbols native module
+│   └── icon-symbol.tsx           # Stub for IconSymbol component
+│
+├── .github/workflows/
+│   └── test.yml                  # CI/CD: run tests on push/PR to main or dev
 │
 ├── CLAUDE.md                     # AI agent instructions (source of truth)
 ├── project.md                    # Full project spec
@@ -256,6 +273,48 @@ eas build --profile production --platform all
 | **Logging** | Verbose (`devLog()` enabled) | Minimal (production-ready) |
 | **Backend** | Future: Dev AWS resources | Future: Prod AWS resources |
 | **Side-by-side** | ✅ Can install both apps | ✅ Can install both apps |
+
+## Testing
+
+**Jest 29** + **@testing-library/react-native** with `babel-preset-expo` for TypeScript transforms.
+
+```bash
+npm test                  # Run all tests (95 tests across 7 suites)
+npm run test:watch        # Watch mode — re-runs affected tests on save
+npm run test:coverage     # Coverage report (utils/ + components/)
+```
+
+Tests are organized by type in `__tests__/`:
+
+```
+__tests__/
+  components/
+    themed-text.test.tsx     # ThemedText — all types, testID passthrough
+    themed-view.test.tsx     # ThemedView — children, testID, multiple children
+    ai-input-bar.test.tsx    # AiInputBar — renders, initial value, input handling
+  utils/
+    date-helpers.test.ts     # Grid generation, formatting, event filtering
+    validation.test.ts       # Email, password, name, and form validation
+    calendar-helpers.test.ts # Calendar color mapping and fallback behavior
+    rl-helpers.test.ts       # Thompson Sampling slot index formula
+  test-utils.tsx             # Shared renderWithProviders() helper
+  tsconfig.json              # Jest type declarations
+```
+
+**Writing component tests:** Use `renderWithProviders` from `../test-utils` instead of `@testing-library/react-native` directly — it wraps components in `ThemeProvider` which is required for theme hooks.
+
+```tsx
+import { renderWithProviders } from '../test-utils';
+import { screen } from '@testing-library/react-native';
+import { MyComponent } from '@/components/my-component';
+
+it('renders correctly', () => {
+  renderWithProviders(<MyComponent />);
+  expect(screen.getByText('Hello')).toBeTruthy();
+});
+```
+
+**CI/CD:** Tests run automatically on push/PR to `main` or `dev` via GitHub Actions (`.github/workflows/test.yml`). Can also be triggered manually from the Actions tab. Coverage report is uploaded as a build artifact retained for 14 days.
 
 ## Key Files
 

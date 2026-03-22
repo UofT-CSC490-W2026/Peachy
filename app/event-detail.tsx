@@ -1,6 +1,6 @@
-import { StyleSheet, View, ScrollView, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, ScrollView, Pressable, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -9,19 +9,18 @@ import { useCalendar } from '@/contexts/calendar-context';
 import { useAuth } from '@/contexts/auth-context';
 import { AuthError } from '@/utils/api-client';
 import { formatDateRange } from '@/utils/date-helpers';
-import { contacts, currentUser } from '@/data/mock-data';
 
 export default function EventDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const eventId = params.id as string;
 
-  const { calendars, events, deleteEvent } = useCalendar();
-  const { logout } = useAuth();
-  const [isDeleting, setIsDeleting] = useState(false);
+  const { calendars, events, deleteEvent, getUser } = useCalendar();
+  const { logout, user } = useAuth();
+
   const event = events.find(e => e.id === eventId);
   const calendar = event ? calendars.find(c => c.id === event.calendarId) : null;
-  const isOwner = event && event.createdBy === currentUser.id;
+  const isOwner = event && user && event.createdBy === user.id;
 
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');
@@ -58,11 +57,8 @@ export default function EventDetailScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            setIsDeleting(true);
-            try {
-              await deleteEvent(event.calendarId, event.id);
-              router.back();
-            } catch (err) {
+            router.back();
+            deleteEvent(event.calendarId, event.id).catch(err => {
               if (err instanceof AuthError) {
                 Alert.alert('Session Expired', 'Your session has expired. Please log in again.', [
                   { text: 'OK', onPress: logout },
@@ -70,9 +66,7 @@ export default function EventDetailScreen() {
                 return;
               }
               Alert.alert('Error', err instanceof Error ? err.message : 'Failed to delete event');
-            } finally {
-              setIsDeleting(false);
-            }
+            });
           },
         },
       ]
@@ -103,7 +97,7 @@ export default function EventDetailScreen() {
           <View style={[styles.aiBadge, { backgroundColor: tintColor + '10', borderColor: borderColor }]}>
             <IconSymbol name="sparkles" size={14} color={textSecondary} />
             <ThemedText style={[styles.aiText, { color: textSecondary }]}>
-              Created from: "{event.aiInput}"
+              Created from: &quot;{event.aiInput}&quot;
             </ThemedText>
           </View>
         )}
@@ -167,7 +161,7 @@ export default function EventDetailScreen() {
                 </ThemedText>
                 <View style={styles.inviteesList}>
                   {(event.invitedUserIds ?? []).map(userId => {
-                    const user = contacts.find(c => c.id === userId);
+                    const user = getUser(userId);
                     if (!user) return null;
                     return (
                       <View key={userId} style={styles.inviteeRow}>
@@ -247,17 +241,12 @@ export default function EventDetailScreen() {
         {/* Delete Button - Only for owner */}
         {isOwner && (
           <Pressable
-            style={[styles.deleteButton, { borderColor: dangerColor, opacity: isDeleting ? 0.7 : 1 }]}
+            style={[styles.deleteButton, { borderColor: dangerColor }]}
             onPress={handleDelete}
-            disabled={isDeleting}
           >
-            {isDeleting ? (
-              <ActivityIndicator size="small" color={dangerColor} />
-            ) : (
-              <ThemedText style={[styles.deleteButtonText, { color: dangerColor }]}>
-                Delete Event
-              </ThemedText>
-            )}
+            <ThemedText style={[styles.deleteButtonText, { color: dangerColor }]}>
+              Delete Event
+            </ThemedText>
           </Pressable>
         )}
       </ScrollView>
