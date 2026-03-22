@@ -114,24 +114,41 @@ npm run test:coverage  # Jest with coverage report (utils/ only)
 
 ## Testing
 
-**Framework:** Jest 29 + `@types/jest`, using `babel-preset-expo` for TypeScript transforms via `babel-jest`. No `ts-jest` or `jest-expo` needed for pure utility tests.
+**Framework:** Jest 29 + `@testing-library/react-native` + `@testing-library/jest-native`, using `babel-preset-expo` for TypeScript transforms via `babel-jest`.
 
-**Config:** `jest.config.js` at project root — `react-native` preset, `@/*` path alias mapped via `moduleNameMapper`, explicit `testPathIgnorePatterns` to exclude `node_modules` and `.expo`.
+**Config:** `jest.config.js` at project root:
+- `react-native` preset
+- `@/*` path alias via `moduleNameMapper`
+- `AsyncStorage` mocked via `moduleNameMapper` (prevents native module crash)
+- `expo-symbols` mocked via `moduleNameMapper` (prevents SF Symbols native crash)
+- `setupFilesAfterEnv` runs `@testing-library/jest-native/extend-expect` for custom matchers
+- Coverage collected from `utils/**/*.ts` and `components/**/*.tsx`
 
 **TypeScript:** Jest globals (`describe`, `it`, `expect`) are scoped to test files only via `__tests__/tsconfig.json`. The root `tsconfig.json` is intentionally unchanged so Jest globals don't leak into production source files.
 
-**Test files** live in `__tests__/` (flat, no mirrored subdirectory structure):
+**Test structure:**
 
 ```
 __tests__/
-  tsconfig.json            # Extends root tsconfig + adds "types": ["jest"]
-  date-helpers.test.ts     # 33 tests — getMonthGrid, getWeekDates, formatTime, isSameDay, etc.
-  validation.test.ts       # 24 tests — all 7 validation functions (email, password, name, etc.)
-  calendar-helpers.test.ts # 13 tests — CALENDAR_COLORS map + getCalendarColor fallback
-  rl-helpers.test.ts       # 12 tests — getSlotIndex formula, 168-slot range, minute-ignoring
+  components/
+    ai-input-bar.test.tsx    # 4 tests — renders, initial value, empty state, typing
+    themed-text.test.tsx     # 6 tests — all text types, testID passthrough
+    themed-view.test.tsx     # 3 tests — children, testID, multiple children
+  utils/
+    date-helpers.test.ts     # 33 tests — getMonthGrid, getWeekDates, formatTime, isSameDay, etc.
+    validation.test.ts       # 24 tests — all 7 validation functions (email, password, name, etc.)
+    calendar-helpers.test.ts # 13 tests — CALENDAR_COLORS map + getCalendarColor fallback
+    rl-helpers.test.ts       # 12 tests — getSlotIndex formula, 168-slot range, minute-ignoring
+  test-utils.tsx             # Shared renderWithProviders() wrapper (ThemeProvider)
+  tsconfig.json              # Extends root tsconfig + adds "types": ["jest"]
+__mocks__/
+  expo-symbols.tsx           # Stub for expo-symbols (SymbolView)
+  icon-symbol.tsx            # Stub for IconSymbol component
 ```
 
-**Scope:** Unit tests for pure utility functions only. Component tests and integration tests are not yet configured. Add new test files to `__tests__/` following the same flat convention.
+**Shared test helper:** Import `renderWithProviders` from `../test-utils` instead of `@testing-library/react-native` for any component that uses theme hooks. Add additional providers to `AllProviders` in `test-utils.tsx` as needed (e.g. `CalendarProvider`, `AuthProvider`).
+
+**CI/CD:** Tests run automatically on push/PR to `main` or `dev` via `.github/workflows/test.yml`. Can also be triggered manually from the GitHub Actions tab. Coverage report is uploaded as a build artifact (retained 14 days).
 
 ## Code Conventions
 
