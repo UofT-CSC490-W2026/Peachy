@@ -19,8 +19,11 @@ export default function HomeScreen() {
   const displayedPendingItems = useMemo(() => pendingItems, [pendingItems]);
 
   const handleAccept = async (itemId: string) => {
+    const item = pendingItems.find(i => i.id === itemId);
+    if (!item) return;
+
     try {
-      await acceptPendingItem(itemId);
+      await acceptPendingItem(itemId, (item as any).sk);
       Alert.alert('Success', 'Invitation accepted');
     } catch {
       Alert.alert('Error', 'Failed to accept invitation. Please try again.');
@@ -28,8 +31,11 @@ export default function HomeScreen() {
   };
 
   const handleDecline = async (itemId: string) => {
+    const item = pendingItems.find(i => i.id === itemId);
+    if (!item) return;
+
     try {
-      await declinePendingItem(itemId);
+      await declinePendingItem(itemId, (item as any).sk);
       Alert.alert('Declined', 'Invitation declined');
     } catch {
       Alert.alert('Error', 'Failed to decline invitation. Please try again.');

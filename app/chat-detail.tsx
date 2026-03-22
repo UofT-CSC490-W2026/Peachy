@@ -1,84 +1,101 @@
 import { StyleSheet, View, FlatList, TextInput, Pressable, KeyboardAvoidingView, Platform, Alert } from 'react-native';
-import { useState, useEffect } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { useCalendar } from '@/contexts/calendar-context';
+import { useChat } from '@/contexts/chat-context';
+import { useAuth } from '@/contexts/auth-context';
 import { ChatMessage } from '@/types';
-import { currentUser, contacts } from '@/data/mock-data';
 
 export default function ChatDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const chatId = params.id as string || 'chat-1';
+  const chatId = params.id as string || '';
   const chatName = params.name as string || 'Chat';
   const chatType = params.type as string || 'direct';
 
-  const { getChatMessages, pendingItems, acceptPendingItem, declinePendingItem } = useCalendar();
+  const { getChatMessages, sendMessage, markChatRead, acceptMessageRequest, messageRequests } = useChat();
+  const { user } = useAuth();
+  const currentUserId = user?.id || '';
 
+  const insets = useSafeAreaInsets();
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
   const textSecondary = useThemeColor({}, 'textSecondary');
   const dangerColor = useThemeColor({}, 'danger');
   const successColor = useThemeColor({}, 'success');
+  const textColor = useThemeColor({}, 'text');
 
-  // Get messages from context and add mock conversation messages
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
 
+  // Check if this is a message request
+  const isMessageRequest = messageRequests.some(r => r.id === chatId);
+
+  const loadMessages = useCallback(async () => {
+    if (!chatId || isMessageRequest) return;
+    try {
+      const data = await getChatMessages(chatId);
+      setMessages(data.messages.reverse()); // API returns newest first, we want oldest first
+    } catch (err) {
+      console.error('Failed to load messages:', err);
+    }
+  }, [chatId, isMessageRequest, getChatMessages]);
+
   useEffect(() => {
-    // Get messages from context and add some mock conversation data for demo
-    const contextMessages = getChatMessages(chatId);
-    const mockConversation: ChatMessage[] = [
-      ...contextMessages,
-      {
-        id: 'msg-conv-1',
-        chatId,
-        senderId: currentUser.id,
-        content: 'Thanks for the reminder!',
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-        readBy: ['user-2', currentUser.id],
-      },
-      {
-        id: 'msg-conv-2',
-        chatId,
-        senderId: 'user-2',
-        content: 'No problem! See you there.',
-        createdAt: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
-        readBy: ['user-2'],
-      },
-    ];
-    setMessages(mockConversation);
-  }, [chatId, getChatMessages]);
+    if (!chatId) { router.back(); return; }
+    loadMessages();
+    markChatRead(chatId);
+  }, [chatId, loadMessages, markChatRead, router]);
 
-  const handleSend = () => {
-    if (!inputText.trim()) return;
+  // Polling for new messages
+  useEffect(() => {
+    if (!chatId) return;
+    const interval = setInterval(loadMessages, 8000);
+    return () => clearInterval(interval);
+  }, [chatId, loadMessages]);
 
-    const newMessage: ChatMessage = {
-      id: `msg-${Date.now()}`,
-      chatId: 'chat-1',
-      senderId: currentUser.id,
-      content: inputText.trim(),
-      createdAt: new Date().toISOString(),
-      readBy: [currentUser.id],
-    };
+  const handleSend = async () => {
+    if (!inputText.trim() || !chatId) return;
 
-    setMessages([...messages, newMessage]);
+    const content = inputText.trim();
     setInputText('');
+
+    // Optimistic update
+    const optimisticMsg: ChatMessage = {
+      id: `temp-${Date.now()}`,
+      chatId,
+      senderId: currentUserId,
+      content,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages(prev => [...prev, optimisticMsg]);
+
+    try {
+      const sent = await sendMessage(chatId, content, 'text');
+      setMessages(prev => prev.map(m => m.id === optimisticMsg.id ? sent : m));
+    } catch {
+      setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
+      Alert.alert('Error', 'Failed to send message');
+    }
+  };
+
+  const handleAcceptRequest = async () => {
+    try {
+      await acceptMessageRequest(chatId);
+      Alert.alert('Accepted', 'Message request accepted');
+    } catch {
+      Alert.alert('Error', 'Failed to accept request');
+    }
   };
 
   const formatMessageTime = (timestamp: string) => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-  };
-
-  const getUserName = (userId: string) => {
-    if (userId === currentUser.id) return currentUser.name;
-    const contact = contacts.find(c => c.id === userId);
-    return contact?.name || 'Unknown';
   };
 
   const handleViewEvent = (eventId: string) => {
@@ -88,77 +105,18 @@ export default function ChatDetailScreen() {
     });
   };
 
-  const handleAcceptInvite = async (messageId: string) => {
-    const message = messages.find(msg => msg.id === messageId);
-    if (!message?.eventId) return;
 
-    // Find the matching pending item by eventId to get its itemId
-    const pendingItem = pendingItems.find(i => i.eventId === message.eventId && i.status === 'pending');
-
-    // Update local state for immediate UI feedback
-    setMessages(prev => prev.map(msg =>
-      msg.id === messageId ? { ...msg, inviteStatus: 'accepted' as const } : msg
-    ));
-
-    if (pendingItem) {
-      try {
-        await acceptPendingItem(pendingItem.id);
-        Alert.alert('Success', 'Event invitation accepted');
-      } catch {
-        // Revert local message state
-        setMessages(prev => prev.map(msg =>
-          msg.id === messageId ? { ...msg, inviteStatus: 'pending' as const } : msg
-        ));
-        Alert.alert('Error', 'Failed to accept invitation. Please try again.');
-      }
-    } else {
-      Alert.alert('Success', 'Event invitation accepted');
-    }
-  };
-
-  const handleDeclineInvite = async (messageId: string) => {
-    const message = messages.find(msg => msg.id === messageId);
-    if (!message?.eventId) return;
-
-    const pendingItem = pendingItems.find(i => i.eventId === message.eventId && i.status === 'pending');
-
-    // Update local state for immediate UI feedback
-    setMessages(prev => prev.map(msg =>
-      msg.id === messageId ? { ...msg, inviteStatus: 'declined' as const } : msg
-    ));
-
-    if (pendingItem) {
-      try {
-        await declinePendingItem(pendingItem.id);
-        Alert.alert('Declined', 'Event invitation declined');
-      } catch {
-        setMessages(prev => prev.map(msg =>
-          msg.id === messageId ? { ...msg, inviteStatus: 'pending' as const } : msg
-        ));
-        Alert.alert('Error', 'Failed to decline invitation. Please try again.');
-      }
-    } else {
-      Alert.alert('Declined', 'Event invitation declined');
-    }
-  };
 
   const renderMessage = ({ item, index }: { item: ChatMessage; index: number }) => {
-    const isCurrentUser = item.senderId === currentUser.id;
+    const isCurrentUser = item.senderId === currentUserId;
     const prevMessage = index > 0 ? messages[index - 1] : null;
     const showHeader = !prevMessage || prevMessage.senderId !== item.senderId;
     const isEventInvite = item.type === 'event_invite';
     const inviteStatus = item.inviteStatus || 'pending';
-    const showActions = isEventInvite && !isCurrentUser && inviteStatus === 'pending';
 
-    // Event invite messages use a card design (similar to pending items)
     if (isEventInvite) {
       return (
         <View style={styles.messageContainer}>
-          {showHeader && !isCurrentUser && (
-            <ThemedText style={[styles.senderName, { color: textSecondary }]}>
-              {getUserName(item.senderId)}
-            </ThemedText>
-          )}
           <Pressable
             style={[styles.eventInviteCard, { backgroundColor: surfaceColor, borderColor }]}
             onPress={() => item.eventId && handleViewEvent(item.eventId)}
@@ -172,7 +130,7 @@ export default function ChatDetailScreen() {
                   {item.content}
                 </ThemedText>
                 <ThemedText style={[styles.eventSubtitle, { color: textSecondary }]}>
-                  {isCurrentUser ? 'You sent an event invitation' : `${getUserName(item.senderId)} invited you`}
+                  {isCurrentUser ? 'You sent an event invitation' : 'Event invitation'}
                 </ThemedText>
               </View>
             </View>
@@ -192,38 +150,16 @@ export default function ChatDetailScreen() {
                 </ThemedText>
               </View>
             )}
-
-            {showActions && (
-              <View style={styles.inviteActions}>
-                <Pressable
-                  style={[styles.inviteButton, styles.declineButton, { borderColor: dangerColor }]}
-                  onPress={() => handleDeclineInvite(item.id)}
-                >
-                  <ThemedText style={[styles.inviteButtonText, { color: dangerColor }]}>
-                    Decline
-                  </ThemedText>
-                </Pressable>
-                <Pressable
-                  style={[styles.inviteButton, styles.acceptButton, { backgroundColor: tintColor }]}
-                  onPress={() => handleAcceptInvite(item.id)}
-                >
-                  <ThemedText style={[styles.inviteButtonText, { color: '#FFFFFF' }]}>
-                    Accept
-                  </ThemedText>
-                </Pressable>
-              </View>
-            )}
           </Pressable>
         </View>
       );
     }
 
-    // Regular text messages
     return (
       <View style={[styles.messageContainer, isCurrentUser && styles.messageContainerRight]}>
-        {showHeader && !isCurrentUser && (
+        {showHeader && !isCurrentUser && chatType === 'calendar_group' && (
           <ThemedText style={[styles.senderName, { color: textSecondary }]}>
-            {getUserName(item.senderId)}
+            {item.senderId}
           </ThemedText>
         )}
         <View
@@ -258,15 +194,15 @@ export default function ChatDetailScreen() {
   const handleAddPeople = () => {
     router.push({
       pathname: '/user-search',
-      params: { mode: 'chat', chatId: params.id || 'chat-1' },
+      params: { mode: 'chat', chatId },
     });
   };
 
   return (
-      <KeyboardAvoidingView
-        style={styles.keyboardAvoid}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={90}
+    <KeyboardAvoidingView
+      style={styles.keyboardAvoid}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       <ThemedView style={styles.container}>
         {/* Header */}
@@ -284,10 +220,33 @@ export default function ChatDetailScreen() {
               </ThemedText>
             )}
           </View>
-          <Pressable onPress={handleAddPeople} style={styles.addButton}>
+          <Pressable onPress={handleAddPeople} style={styles.addPeopleButton}>
             <IconSymbol name="person.2" size={24} color={tintColor} />
           </Pressable>
         </View>
+
+        {/* Message Request Banner */}
+        {isMessageRequest && (
+          <View style={[styles.requestBanner, { backgroundColor: surfaceColor, borderBottomColor: borderColor }]}>
+            <ThemedText style={styles.requestText}>
+              {chatName} wants to message you
+            </ThemedText>
+            <View style={styles.requestActions}>
+              <Pressable
+                style={[styles.requestButton, { borderColor: dangerColor }]}
+                onPress={() => router.back()}
+              >
+                <ThemedText style={{ color: dangerColor, fontWeight: '600' }}>Decline</ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.requestButton, { backgroundColor: tintColor }]}
+                onPress={handleAcceptRequest}
+              >
+                <ThemedText style={{ color: '#FFFFFF', fontWeight: '600' }}>Accept</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        )}
 
         {/* Messages */}
         <FlatList
@@ -295,19 +254,18 @@ export default function ChatDetailScreen() {
           renderItem={renderMessage}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.messagesList}
-          inverted={false}
         />
 
         {/* Input Bar */}
-        <View style={[styles.inputContainer, { backgroundColor: surfaceColor, borderTopColor: borderColor }]}>
+        <View style={[styles.inputContainer, { backgroundColor: surfaceColor, borderTopColor: borderColor, paddingBottom: Math.max(insets.bottom, 12) }]}>
           <TextInput
-            style={[styles.input, { color: useThemeColor({}, 'text') }]}
+            style={[styles.input, { color: textColor }]}
             placeholder="Type a message..."
             placeholderTextColor={textSecondary}
             value={inputText}
             onChangeText={setInputText}
             multiline
-            maxLength={500}
+            maxLength={5000}
           />
           <Pressable
             style={[
@@ -357,8 +315,29 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 2,
   },
-  addButton: {
+  addPeopleButton: {
     padding: 8,
+  },
+  requestBanner: {
+    padding: 16,
+    borderBottomWidth: 1,
+    alignItems: 'center',
+  },
+  requestText: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  requestActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  requestButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   messagesList: {
     paddingHorizontal: 16,
@@ -427,27 +406,6 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 12,
-    fontWeight: '600',
-  },
-  inviteActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  inviteButton: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  declineButton: {
-    borderWidth: 1,
-  },
-  acceptButton: {
-    // backgroundColor set via tintColor
-  },
-  inviteButtonText: {
-    fontSize: 14,
     fontWeight: '600',
   },
   messageText: {
