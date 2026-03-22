@@ -70,7 +70,7 @@ export default function CreateScreen() {
             </View>
             <View style={[styles.aiBubble, { backgroundColor: surfaceSecondary }]}>
               <ThemedText style={styles.bubbleText}>
-                Hi! I'm Peachy AI. Tell me what you'd like to schedule and I'll take care of it for you.
+                {"Hi! I'm Peachy AI. Tell me what you'd like to schedule and I'll take care of it for you."}
               </ThemedText>
             </View>
           </View>

@@ -63,7 +63,6 @@ export default function SettingsScreen() {
   const router = useRouter();
   const borderColor = useThemeColor({}, 'border');
   const textColor = useThemeColor({}, 'text');
-  const textSecondary = useThemeColor({}, 'textSecondary');
   const { logout } = useAuth();
 
   const soon = (feature: string) => () => Alert.alert(feature, 'Coming soon');

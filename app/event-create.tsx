@@ -196,7 +196,7 @@ export default function EventCreateScreen() {
             <IconSymbol name="sparkles" size={16} color={tintColor} />
             <View style={styles.aiBadgeContent}>
               <ThemedText style={[styles.aiBadgeTitle, { color: tintColor }]}>AI suggested</ThemedText>
-              <ThemedText style={styles.aiBadgeInput}>"{aiInput}"</ThemedText>
+              <ThemedText style={styles.aiBadgeInput}>&quot;{aiInput}&quot;</ThemedText>
             </View>
           </View>
         )}

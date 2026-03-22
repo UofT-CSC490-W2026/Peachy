@@ -32,7 +32,6 @@ export function AvailabilityViewer({
   const dangerColor = useThemeColor({}, 'danger');
   const surfaceColor = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
-  const tintColor = useThemeColor({}, 'tint');
 
   // Check availability for each user
   const checkUserAvailability = (userId: string): UserAvailability => {
