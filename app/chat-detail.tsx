@@ -28,31 +28,29 @@ export default function ChatDetailScreen() {
   const textSecondary = useThemeColor({}, 'textSecondary');
   const dangerColor = useThemeColor({}, 'danger');
   const successColor = useThemeColor({}, 'success');
+  const textColor = useThemeColor({}, 'text');
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
-  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
   // Check if this is a message request
   const isMessageRequest = messageRequests.some(r => r.id === chatId);
 
   const loadMessages = useCallback(async () => {
     if (!chatId || isMessageRequest) return;
-    setIsLoadingMessages(true);
     try {
       const data = await getChatMessages(chatId);
       setMessages(data.messages.reverse()); // API returns newest first, we want oldest first
     } catch (err) {
       console.error('Failed to load messages:', err);
-    } finally {
-      setIsLoadingMessages(false);
     }
   }, [chatId, isMessageRequest, getChatMessages]);
 
   useEffect(() => {
+    if (!chatId) { router.back(); return; }
     loadMessages();
-    if (chatId) markChatRead(chatId);
-  }, [chatId, loadMessages, markChatRead]);
+    markChatRead(chatId);
+  }, [chatId, loadMessages, markChatRead, router]);
 
   // Polling for new messages
   useEffect(() => {
@@ -60,11 +58,6 @@ export default function ChatDetailScreen() {
     const interval = setInterval(loadMessages, 8000);
     return () => clearInterval(interval);
   }, [chatId, loadMessages]);
-
-  if (!chatId) {
-    router.back();
-    return null;
-  }
 
   const handleSend = async () => {
     if (!inputText.trim() || !chatId) return;
@@ -85,7 +78,7 @@ export default function ChatDetailScreen() {
     try {
       const sent = await sendMessage(chatId, content, 'text');
       setMessages(prev => prev.map(m => m.id === optimisticMsg.id ? sent : m));
-    } catch (err) {
+    } catch {
       setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
       Alert.alert('Error', 'Failed to send message');
     }
@@ -95,7 +88,7 @@ export default function ChatDetailScreen() {
     try {
       await acceptMessageRequest(chatId);
       Alert.alert('Accepted', 'Message request accepted');
-    } catch (err) {
+    } catch {
       Alert.alert('Error', 'Failed to accept request');
     }
   };
@@ -266,7 +259,7 @@ export default function ChatDetailScreen() {
         {/* Input Bar */}
         <View style={[styles.inputContainer, { backgroundColor: surfaceColor, borderTopColor: borderColor, paddingBottom: Math.max(insets.bottom, 12) }]}>
           <TextInput
-            style={[styles.input, { color: useThemeColor({}, 'text') }]}
+            style={[styles.input, { color: textColor }]}
             placeholder="Type a message..."
             placeholderTextColor={textSecondary}
             value={inputText}

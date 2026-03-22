@@ -94,7 +94,7 @@ export default function UserSearchScreen() {
         prev.map(u => u.id === user.id ? { ...u, friendshipStatus: 'pending_sent' as FriendshipStatus } : u)
       );
       Alert.alert('Sent', `Friend request sent to ${user.name}`);
-    } catch (err) {
+    } catch {
       Alert.alert('Error', 'Failed to send friend request');
     } finally {
       setSendingRequest(null);
@@ -126,7 +126,7 @@ export default function UserSearchScreen() {
               userId: selectedUser.id,
             },
           });
-        } catch (err) {
+        } catch {
           Alert.alert('Error', 'Failed to create conversation');
         }
       }

@@ -22,7 +22,7 @@ interface AvatarUploadUrlResponse {
 
 export default function ProfileEditScreen() {
   const router = useRouter();
-  const { user, updateUser, fetchProfile, getIdToken } = useAuth();
+  const { user, updateUser, getIdToken } = useAuth();
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
