@@ -61,6 +61,11 @@ export default function ChatDetailScreen() {
     return () => clearInterval(interval);
   }, [chatId, loadMessages]);
 
+  if (!chatId) {
+    router.back();
+    return null;
+  }
+
   const handleSend = async () => {
     if (!inputText.trim() || !chatId) return;
 
