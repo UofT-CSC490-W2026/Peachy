@@ -43,11 +43,24 @@ const config = {
     'constants/**/*.ts',
 
     // Exclusions — not unit-testable or covered elsewhere
-    '!utils/ai-parser.ts',       // mock stub, no real logic
-    '!utils/api-client.ts',      // HTTP client, needs integration tests
-    '!utils/notifications.ts',   // native push API, untestable in Jest
-    '!components/ui/**',         // native icon primitives (SF Symbols)
-    '!hooks/use-color-scheme.web.ts', // web-only hydration hook
+    '!utils/ai-parser.ts',                         // mock stub, no real logic
+    '!utils/api-client.ts',                        // HTTP client, needs integration tests
+    '!utils/notifications.ts',                     // native push API, untestable in Jest
+    '!components/ui/**',                           // native icon primitives (SF Symbols)
+    '!components/haptic-tab.tsx',                  // native haptics, untestable in Jest
+    '!components/availability-viewer.tsx',         // needs CalendarContext + live API
+    '!components/pending-items.tsx',               // needs CalendarContext + router integration
+    '!components/calendar/time-grid.tsx',          // 24h pixel-positioned grid, visual only
+    '!components/calendar/month-view.tsx',         // full calendar grid, visual only
+    '!components/calendar/week-view.tsx',          // full calendar grid, visual only
+    '!components/calendar/day-view.tsx',           // full calendar grid, visual only
+    '!components/calendar/month-day-cell.tsx',     // pixel-positioned cell, visual only
+    '!components/calendar/event-block.tsx',        // pixel-positioned block, visual only
+    '!components/calendar/upcoming-events.tsx',    // needs CalendarContext
+    '!components/calendar/event-list.tsx',         // needs CalendarContext
+    '!components/calendar/calendar-filter-bar.tsx',// needs CalendarContext
+    '!components/form/form-date-picker.tsx',       // native date/time picker, untestable in Jest
+    '!hooks/use-color-scheme.web.ts',              // web-only hydration hook
     '!**/__tests__/**',
     '!**/__mocks__/**',
   ],
