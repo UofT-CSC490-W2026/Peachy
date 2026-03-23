@@ -33,12 +33,23 @@ const config = {
   setupFilesAfterEnv: ['@testing-library/jest-native/extend-expect'],
   coverageReporters: ['text', 'lcov', 'clover'],
   collectCoverageFrom: [
+    // Utilities — pure functions, fully testable
     'utils/**/*.ts',
+    // Components — UI components testable with renderWithProviders
     'components/**/*.tsx',
-    '!utils/ai-parser.ts',
-    '!utils/api-client.ts',
-    '!components/ui/**',
+    // Hooks — custom hooks with pure logic
+    'hooks/**/*.ts',
+    // Constants — exported values and mappings
+    'constants/**/*.ts',
+
+    // Exclusions — not unit-testable or covered elsewhere
+    '!utils/ai-parser.ts',       // mock stub, no real logic
+    '!utils/api-client.ts',      // HTTP client, needs integration tests
+    '!utils/notifications.ts',   // native push API, untestable in Jest
+    '!components/ui/**',         // native icon primitives (SF Symbols)
+    '!hooks/use-color-scheme.web.ts', // web-only hydration hook
     '!**/__tests__/**',
+    '!**/__mocks__/**',
   ],
 };
 
