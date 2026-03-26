@@ -11,6 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
 import { User } from '@/types';
+import { createApiClient, ApiError } from '@/utils/api-client';
 import { devLog } from '@/config/environment';
 
 // ─── Cognito Storage Adapter ──────────────────────────────────────────────────
@@ -253,6 +254,8 @@ interface AuthContextType {
   pendingVerificationEmail: string | null;
   setPendingVerificationEmail: (email: string | null) => void;
   getIdToken: () => Promise<string | null>;
+  fetchProfile: () => Promise<void>;
+  updateUser: (updates: Partial<Pick<User, 'name' | 'username' | 'interests'>>) => Promise<void>;
   login: (email: string, password: string) => Promise<AuthResult>;
   signup: (name: string, email: string, password: string) => Promise<AuthResult>;
   confirmSignup: (email: string, code: string) => Promise<AuthResult>;
@@ -285,6 +288,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!err && session?.isValid()) {
           _currentCognitoUser = currentUser;
           setUser(userFromSession(session));
+          // Non-blocking: enrich with backend profile data after session restore
+          const restoreClient = createApiClient(() => {
+            return new Promise<string | null>((resolve) => {
+              currentUser.getSession((e: Error | null, s: CognitoUserSession | null) => {
+                resolve(!e && s?.isValid() ? s.getIdToken().getJwtToken() : null);
+              });
+            });
+          });
+          restoreClient.get<User>('/users/me').then(setUser).catch((e) =>
+            devLog('Session restore fetchProfile failed:', e instanceof Error ? e.message : e)
+          );
         }
         setIsRestoring(false);
       });
@@ -307,6 +321,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           onSuccess: (session) => {
             _currentCognitoUser = cognitoUser;
             setUser(userFromSession(session));
+            // Non-blocking: enrich with backend profile data
+            apiClient.get<User>('/users/me').then(setUser).catch((e) =>
+              devLog('Post-login fetchProfile failed:', e instanceof Error ? e.message : e)
+            );
             resolve({ success: true });
           },
           onFailure: (err) => {
@@ -436,6 +454,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return _inflightTokenRequest;
   }, []);
 
+  // API client for profile operations — uses getIdToken to avoid circular deps
+  const apiClient = createApiClient(getIdToken);
+
+  const fetchProfile = useCallback(async () => {
+    try {
+      const profile = await apiClient.get<User>('/users/me');
+      setUser(profile);
+    } catch (err) {
+      devLog('fetchProfile failed (non-blocking):', err instanceof Error ? err.message : err);
+    }
+  }, []);
+
+  const updateUser = useCallback(async (updates: Partial<Pick<User, 'name' | 'username' | 'interests'>>) => {
+    const updated = await apiClient.put<User>('/users/me', updates);
+    setUser(updated);
+  }, []);
+
   const logout = useCallback(() => {
     // S1: globalSignOut invalidates the Cognito refresh token server-side so that
     // exfiltrated tokens cannot be used after the user logs out. We clear local
@@ -466,6 +501,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         pendingVerificationEmail,
         setPendingVerificationEmail,
         getIdToken,
+        fetchProfile,
+        updateUser,
         login,
         signup,
         confirmSignup,

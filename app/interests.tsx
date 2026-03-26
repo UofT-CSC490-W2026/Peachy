@@ -28,7 +28,7 @@ export default function InterestsScreen() {
       </View>
 
       <ThemedText style={[styles.subtitle, { color: textSecondary }]}>
-        Select what you're into — others with the same interests can find you. ({selected.size}/{MAX_INTERESTS})
+        {"Select what you're into — others with the same interests can find you."} ({selected.size}/{MAX_INTERESTS})
       </ThemedText>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

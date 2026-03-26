@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback, ReactNode } from 'react';
-import { Calendar, CalendarEvent, CalendarType, PendingItem, Chat, ChatMessage, User } from '@/types';
-import { mockChats, currentUser, contacts } from '@/data/mock-data';
+import { Calendar, CalendarEvent, CalendarType, PendingItem, User } from '@/types';
 import { useAuth } from '@/contexts/auth-context';
 import { createApiClient, AuthError } from '@/utils/api-client';
 
@@ -36,7 +35,6 @@ interface CalendarContextType {
   events: CalendarEvent[];
   visibleEvents: CalendarEvent[];
   pendingItems: PendingItem[];
-  chats: Chat[];
   // Loading state
   isLoading: boolean;
   error: string | null;
@@ -53,13 +51,10 @@ interface CalendarContextType {
   createEvent: (calendarId: string, data: CreateEventInput) => Promise<CalendarEvent>;
   updateEvent: (calendarId: string, eventId: string, data: Partial<CalendarEvent>) => Promise<void>;
   deleteEvent: (calendarId: string, eventId: string) => Promise<void>;
-  // Pending items / invite actions
+  // Pending items
   refreshPendingItems: () => Promise<void>;
-  acceptPendingItem: (itemId: string) => Promise<void>;
-  declinePendingItem: (itemId: string) => Promise<void>;
-  // Chat actions (still mocked)
-  getChatMessages: (chatId: string) => ChatMessage[];
-  updateChatMessage: (chatId: string, messageId: string, updates: Partial<ChatMessage>) => void;
+  acceptPendingItem: (itemId: string, sk?: string) => Promise<void>;
+  declinePendingItem: (itemId: string, sk?: string) => Promise<void>;
 }
 
 const CalendarContext = createContext<CalendarContextType | undefined>(undefined);
@@ -78,16 +73,8 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Still-mocked state ────────────────────────────────────────────────────
+  // ── Pending items state (from API) ────────────────────────────────────────
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
-  const [chats] = useState<Chat[]>(mockChats);
-  const [chatMessages, setChatMessages] = useState<Record<string, ChatMessage[]>>(() => {
-    const initial: Record<string, ChatMessage[]> = {};
-    mockChats.forEach(chat => {
-      initial[chat.id] = chat.lastMessage ? [chat.lastMessage] : [];
-    });
-    return initial;
-  });
 
   // ── API data loading ──────────────────────────────────────────────────────
 
@@ -119,6 +106,16 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       if (generation !== loadGenRef.current) return; // stale
 
       setEvents(eventsArrays.flat());
+
+      // 3. Fetch pending items
+      try {
+        const pendingData = await apiClient.get<{ items: PendingItem[] }>('pending-items?status=pending');
+        if (generation === loadGenRef.current) {
+          setPendingItems(pendingData.items);
+        }
+      } catch {
+        // Non-fatal: pending items might not be deployed yet
+      }
     } catch (err) {
       if (generation !== loadGenRef.current) return;
       if (err instanceof AuthError) {
@@ -319,105 +316,64 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     }
   }, [apiClient]);
 
-  // ── Pending item actions (API-backed) ────────────────────────────────────
+  // ── Pending item actions (API) ──────────────────────────────────────────
 
   const refreshPendingItems = useCallback(async () => {
-    await loadPendingItems();
-  }, [loadPendingItems]);
-
-  const acceptPendingItem = useCallback(async (itemId: string) => {
-    const item = pendingItems.find(i => i.id === itemId);
-    if (!item) return;
-
-    // Optimistic update — remove from the pending list
-    setPendingItems(prev => prev.filter(i => i.id !== itemId));
-
-    // Sync any matching chat messages to 'accepted'
-    if (item.eventId) {
-      setChatMessages(prev => {
-        const updated = { ...prev };
-        Object.keys(updated).forEach(chatId => {
-          updated[chatId] = updated[chatId].map(msg =>
-            msg.eventId === item.eventId ? { ...msg, inviteStatus: 'accepted' as const } : msg
-          );
-        });
-        return updated;
-      });
-    }
-
     try {
-      await apiClient.post(`pending-items/${itemId}/accept`, { sk: item.sk });
+      const data = await apiClient.get<{ items: PendingItem[] }>('pending-items?status=pending');
+      setPendingItems(data.items);
     } catch (err) {
-      // Revert optimistic update on failure
-      setPendingItems(prev => [...prev, { ...item, status: 'pending' }]);
+      console.error('Failed to refresh pending items:', err);
+    }
+  }, [apiClient]);
+
+  const acceptPendingItem = useCallback(async (itemId: string, sk?: string) => {
+    // Optimistic update
+    setPendingItems(prev => prev.map(item =>
+      item.id === itemId ? { ...item, status: 'accepted' as const } : item
+    ));
+    try {
+      await apiClient.post(`pending-items/${itemId}/accept`, { ...(sk ? { sk } : {}) });
+      await refreshPendingItems();
+    } catch (err) {
+      await refreshPendingItems(); // revert
       throw err;
     }
-  }, [apiClient, pendingItems]);
+  }, [apiClient, refreshPendingItems]);
 
-  const declinePendingItem = useCallback(async (itemId: string) => {
-    const item = pendingItems.find(i => i.id === itemId);
-    if (!item) return;
-
-    // Optimistic update — remove from the pending list
-    setPendingItems(prev => prev.filter(i => i.id !== itemId));
-
-    // Sync any matching chat messages to 'declined'
-    if (item.eventId) {
-      setChatMessages(prev => {
-        const updated = { ...prev };
-        Object.keys(updated).forEach(chatId => {
-          updated[chatId] = updated[chatId].map(msg =>
-            msg.eventId === item.eventId ? { ...msg, inviteStatus: 'declined' as const } : msg
-          );
-        });
-        return updated;
-      });
-    }
-
+  const declinePendingItem = useCallback(async (itemId: string, sk?: string) => {
+    setPendingItems(prev => prev.map(item =>
+      item.id === itemId ? { ...item, status: 'declined' as const } : item
+    ));
     try {
-      await apiClient.post(`pending-items/${itemId}/decline`, { sk: item.sk });
+      await apiClient.post(`pending-items/${itemId}/decline`, { ...(sk ? { sk } : {}) });
+      await refreshPendingItems();
     } catch (err) {
-      // Revert optimistic update on failure
-      setPendingItems(prev => [...prev, { ...item, status: 'pending' }]);
+      await refreshPendingItems();
       throw err;
     }
-  }, [apiClient, pendingItems]);
+  }, [apiClient, refreshPendingItems]);
 
-  // ── Chat actions (still mocked) ───────────────────────────────────────────
+  // ── User lookup (cached, with current user from auth) ────────────────────
 
-  const getChatMessages = useCallback((chatId: string): ChatMessage[] => {
-    return chatMessages[chatId] || [];
-  }, [chatMessages]);
-
-  const updateChatMessage = useCallback((
-    chatId: string,
-    messageId: string,
-    updates: Partial<ChatMessage>
-  ) => {
-    setChatMessages(prev => ({
-      ...prev,
-      [chatId]: (prev[chatId] || []).map(msg =>
-        msg.id === messageId ? { ...msg, ...updates } : msg
-      ),
-    }));
-
-    if (updates.inviteStatus && updates.eventId) {
-      setPendingItems(prev =>
-        prev.map(item =>
-          item.eventId === updates.eventId
-            ? { ...item, status: updates.inviteStatus as 'pending' | 'accepted' | 'declined' }
-            : item
-        )
-      );
-    }
-  }, []);
-
-  // ── User lookup (still mocked — GET /users not yet implemented) ───────────
+  const userCacheRef = useRef<Map<string, User>>(new Map());
 
   const getUser = useCallback((userId: string): User | undefined => {
-    if (userId === currentUser.id) return currentUser;
-    return contacts.find(u => u.id === userId);
-  }, []);
+    // Check current logged-in user
+    if (user && userId === user.id) {
+      return {
+        id: user.id,
+        name: user.name ?? '',
+        username: user.username ?? '',
+        email: user.email ?? '',
+        avatarUrl: user.avatarUrl,
+        createdAt: '',
+        updatedAt: '',
+      };
+    }
+    // Check cache
+    return userCacheRef.current.get(userId);
+  }, [user]);
 
   // ── Derived state ─────────────────────────────────────────────────────────
 
@@ -435,7 +391,6 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         events,
         visibleEvents,
         pendingItems,
-        chats,
         isLoading,
         error,
         getUser,
@@ -450,8 +405,6 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         refreshPendingItems,
         acceptPendingItem,
         declinePendingItem,
-        getChatMessages,
-        updateChatMessage,
       }}
     >
       {children}
