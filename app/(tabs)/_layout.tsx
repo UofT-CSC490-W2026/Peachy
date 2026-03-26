@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -9,18 +9,23 @@ import {
   Alert,
   ActivityIndicator,
   Keyboard,
-  LayoutChangeEvent,
 } from 'react-native';
 import Constants from 'expo-constants';
+import { Audio } from 'expo-av';
 
+import { BottomTabBar, BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { HapticTab } from '@/components/haptic-tab';
 import { HomeIcon, CalendarIcon, ChatIcon, ProfileIcon } from '@/components/ui/tab-icons';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { ThemedText } from '@/components/themed-text';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/contexts/auth-context';
+import { useCalendar } from '@/contexts/calendar-context';
 import { ApiError, AuthError } from '@/utils/api-client';
 import type { AIParseResult } from '@/utils/ai-parser';
+import { transcribeAudio } from '@/utils/audio-transcribe';
+import { getSlotIndex } from '@/utils/rl-helpers';
 import { useRouter } from 'expo-router';
 
 export default function TabLayout() {
@@ -28,41 +33,127 @@ export default function TabLayout() {
   const theme = Colors[colorScheme ?? 'light'];
   const tabBarBg = theme.surface;
   const router = useRouter();
-  const { getIdToken } = useAuth();
+  const { user, getIdToken } = useAuth();
+  const { calendars, createEvent } = useCalendar();
 
   const [sheetVisible, setSheetVisible] = useState(false);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [tabBarHeight, setTabBarHeight] = useState(50);
-  const slideAnim = useRef(new Animated.Value(0)).current;
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const heightAnim = useRef(new Animated.Value(0)).current;
   const inputRef = useRef<TextInput>(null);
 
-  const onTabBarLayout = useCallback((e: LayoutChangeEvent) => {
-    setTabBarHeight(e.nativeEvent.layout.height);
-  }, []);
+  const renderTabBar = useCallback((props: BottomTabBarProps) => (
+    <View>
+      {sheetVisible && (
+        <Animated.View style={{ height: heightAnim, overflow: 'hidden' }}>
+          <View
+            onLayout={(e) => {
+              const h = e.nativeEvent.layout.height;
+              if (h > 0) setSheetHeight(h);
+            }}
+            style={[
+              styles.sheetInline,
+              {
+                backgroundColor: theme.surface,
+                borderTopColor: theme.border,
+              },
+            ]}
+          >
+            <View style={[styles.inputRow, { borderColor: isRecording ? theme.danger : theme.border }]}>
+              {isTranscribing ? (
+                <ActivityIndicator size="small" color={theme.tint} style={styles.micButton} />
+              ) : (
+                <Pressable onPress={handleMicPress} style={styles.micButton} disabled={isLoading}>
+                  <IconSymbol
+                    name={isRecording ? 'stop.fill' : 'mic.fill'}
+                    size={20}
+                    color={isRecording ? theme.danger : theme.icon}
+                  />
+                </Pressable>
+              )}
+              {isRecording ? (
+                <ThemedText style={[styles.recordingText, { color: theme.danger }]}>
+                  Recording... tap stop when done
+                </ThemedText>
+              ) : (
+                <TextInput
+                  ref={inputRef}
+                  style={[styles.input, { color: theme.text }]}
+                  placeholder={isTranscribing ? 'Transcribing...' : 'Schedule with AI...'}
+                  placeholderTextColor={theme.icon}
+                  value={inputText}
+                  onChangeText={setInputText}
+                  multiline
+                  editable={!isLoading && !isTranscribing}
+                />
+              )}
+              {isLoading ? (
+                <ActivityIndicator size="small" color={theme.tint} style={styles.sendArea} />
+              ) : (
+                !isRecording && inputText.trim().length > 0 && (
+                  <Pressable
+                    onPress={() => handleSend()}
+                    style={[styles.sendBtn, { backgroundColor: theme.tint }]}
+                    disabled={isTranscribing}
+                  >
+                    <IconSymbol name="arrow.up.circle.fill" size={28} color="#FFFFFF" />
+                  </Pressable>
+                )
+              )}
+            </View>
+          </View>
+        </Animated.View>
+      )}
+      <BottomTabBar {...props} />
+    </View>
+  ), [sheetVisible, heightAnim, theme, isRecording, isTranscribing, isLoading, inputText, handleMicPress, handleSend]);
 
   const openSheet = useCallback(() => {
     setSheetVisible(true);
-    Animated.timing(slideAnim, {
-      toValue: 1,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
+    heightAnim.setValue(0);
+    Animated.parallel([
+      Animated.timing(heightAnim, {
+        toValue: sheetHeight,
+        duration: 200,
+        useNativeDriver: false,
+      }),
+      Animated.timing(rotateAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
       inputRef.current?.focus();
     });
-  }, [slideAnim]);
+  }, [heightAnim, rotateAnim, sheetHeight]);
 
   const closeSheet = useCallback(() => {
     Keyboard.dismiss();
-    Animated.timing(slideAnim, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
+    if (recordingRef.current) {
+      recordingRef.current.stopAndUnloadAsync().catch(() => {});
+      recordingRef.current = null;
+      setIsRecording(false);
+    }
+    Animated.parallel([
+      Animated.timing(heightAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: false,
+      }),
+      Animated.timing(rotateAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
       setSheetVisible(false);
       setInputText('');
     });
-  }, [slideAnim]);
+  }, [heightAnim, rotateAnim]);
 
   const handleSend = useCallback(async (text?: string) => {
     const message = (text ?? inputText).trim();
@@ -97,46 +188,128 @@ export default function TabLayout() {
       }
 
       const parsed = await response.json() as AIParseResult;
+      const data = parsed.extractedData;
+
+      const calendarId = calendars[0]?.id;
+      if (!calendarId) {
+        Alert.alert('No Calendar', 'Please create a calendar first before using AI scheduling.');
+        closeSheet();
+        return;
+      }
+
+      await createEvent(calendarId, {
+        title: data.title || 'Untitled Event',
+        startTime: data.startTime,
+        endTime: data.endTime,
+        isAllDay: data.isAllDay ?? false,
+        timezone,
+        ...(data.location ? { location: data.location } : {}),
+        invitedUserIds: data.invitedUserIds || [],
+        aiGenerated: true,
+        aiInput: message,
+        aiSuggested: parsed,
+      });
+
+      // Fire-and-forget RL feedback — user accepted AI suggestion as-is
+      if (user && data.startTime) {
+        const suggestedSlotIndex = getSlotIndex(new Date(data.startTime));
+        fetch(`${apiUrl}/users/${encodeURIComponent(user.id)}/rl/feedback`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action: 'accept', suggestedSlotIndex }),
+        }).catch(() => {});
+      }
 
       closeSheet();
-      router.push({
-        pathname: '/event-create',
-        params: {
-          aiGenerated: 'true',
-          aiInput: message,
-          title: parsed.extractedData.title || '',
-          startTime: parsed.extractedData.startTime || '',
-          endTime: parsed.extractedData.endTime || '',
-          isAllDay: parsed.extractedData.isAllDay ? 'true' : 'false',
-          location: parsed.extractedData.location || '',
-          inviteeIds: parsed.extractedData.invitedUserIds?.join(',') || '',
-          aiSuggested: JSON.stringify(parsed),
-        },
-      });
-    } catch {
-      Alert.alert('Error', 'Could not understand your request. Please try again.');
+      Alert.alert('Event Created', `"${data.title}" has been added to your calendar.`);
+    } catch (err) {
+      console.error('AI send error:', err);
+      Alert.alert('Error', 'Could not create event. Please try again.');
     } finally {
       setIsLoading(false);
     }
-  }, [inputText, isLoading, getIdToken, closeSheet, router]);
+  }, [inputText, isLoading, getIdToken, closeSheet, calendars, createEvent]);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Microphone access is needed for voice input.');
+        return;
+      }
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY,
+      );
+      recordingRef.current = recording;
+      setIsRecording(true);
+    } catch {
+      Alert.alert('Error', 'Could not start recording. Please try again.');
+    }
+  }, []);
+
+  const stopRecording = useCallback(async () => {
+    const recording = recordingRef.current;
+    if (!recording) return;
+
+    setIsRecording(false);
+    setIsTranscribing(true);
+    try {
+      await recording.stopAndUnloadAsync();
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+      const uri = recording.getURI();
+      recordingRef.current = null;
+      if (!uri) throw new Error('No recording URI');
+
+      const transcript = await transcribeAudio(uri, getIdToken);
+      if (transcript.trim()) {
+        setInputText(prev => prev ? `${prev} ${transcript.trim()}` : transcript.trim());
+        inputRef.current?.focus();
+      } else {
+        Alert.alert('No Speech Detected', 'Could not detect any speech. Please try again.');
+      }
+    } catch (err) {
+      if (err instanceof AuthError) {
+        Alert.alert('Session Expired', 'Please log in again.');
+      } else {
+        Alert.alert('Transcription Failed', err instanceof Error ? err.message : 'Please try again.');
+      }
+    } finally {
+      setIsTranscribing(false);
+    }
+  }, [getIdToken]);
 
   const handleMicPress = useCallback(() => {
-    Alert.alert(
-      'Voice Input',
-      'Voice input coming soon! For now, try typing:\n\n• "dinner with Jordan tomorrow at 7pm"\n• "meeting with Taylor next Monday 2pm"\n• "lunch Friday at noon"',
-      [{ text: 'OK' }],
-    );
+    if (isTranscribing || isLoading) return;
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  }, [isRecording, isTranscribing, isLoading, startRecording, stopRecording]);
+
+  // Cleanup recording on unmount
+  useEffect(() => {
+    return () => {
+      if (recordingRef.current) {
+        recordingRef.current.stopAndUnloadAsync().catch(() => {});
+      }
+    };
   }, []);
 
   const [sheetHeight, setSheetHeight] = useState(64);
-  const translateY = slideAnim.interpolate({
+  const plusRotation = rotateAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [sheetHeight, 0],
+    outputRange: ['0deg', '45deg'],
   });
 
   return (
     <View style={styles.root}>
       <Tabs
+        tabBar={renderTabBar}
         screenOptions={{
           tabBarActiveTintColor: theme.text,
           tabBarInactiveTintColor: theme.icon,
@@ -170,16 +343,17 @@ export default function TabLayout() {
           options={{
             title: 'Create',
             tabBarIcon: () => (
-              <View style={[styles.plusSquare, { backgroundColor: sheetVisible ? theme.text : theme.icon }]}>
-                <View style={[styles.plusH, { backgroundColor: tabBarBg }]} />
-                <View style={[styles.plusV, { backgroundColor: tabBarBg }]} />
+              <View style={[styles.plusSquare, { backgroundColor: sheetVisible ? theme.text : theme.tint }]}>
+                <Animated.View style={[styles.plusIcon, { transform: [{ rotate: plusRotation }] }]}>
+                  <View style={[styles.plusH, { backgroundColor: tabBarBg }]} />
+                  <View style={[styles.plusV, { backgroundColor: tabBarBg }]} />
+                </Animated.View>
               </View>
             ),
             tabBarButton: ({ children, style }) => (
               <Pressable
                 onPress={() => sheetVisible ? closeSheet() : openSheet()}
                 onLongPress={handleMicPress}
-                onLayout={onTabBarLayout}
                 style={[style, styles.createButton]}
               >
                 {children}
@@ -206,57 +380,6 @@ export default function TabLayout() {
           }}
         />
       </Tabs>
-
-      {/* AI Input Bar — slides up from under the tab bar, clipped so it doesn't overlap */}
-      <View style={[styles.sheetClip, { bottom: tabBarHeight, height: sheetVisible ? sheetHeight : 0, overflow: 'hidden' }]}>
-        <Animated.View
-          onLayout={(e) => setSheetHeight(e.nativeEvent.layout.height)}
-          style={[
-            styles.sheet,
-            {
-              backgroundColor: theme.surface,
-              borderTopColor: theme.border,
-              transform: [{ translateY }],
-            },
-          ]}
-        >
-          <View style={[styles.inputRow, { borderColor: theme.border }]}>
-            <Pressable onPress={handleMicPress} style={styles.micButton} disabled={isLoading}>
-              <IconSymbol name="mic.fill" size={20} color={theme.icon} />
-            </Pressable>
-            <TextInput
-              ref={inputRef}
-              style={[styles.input, { color: theme.text }]}
-              placeholder="Schedule with AI..."
-              placeholderTextColor={theme.icon}
-              value={inputText}
-              onChangeText={(text) => {
-                setInputText(text);
-                // Force textarea to recalculate height on web
-                const el = (inputRef.current as any)?._node ?? (inputRef.current as any);
-                if (el?.style) {
-                  el.style.height = 'auto';
-                  el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
-                }
-              }}
-              multiline
-              editable={!isLoading}
-            />
-            {isLoading ? (
-              <ActivityIndicator size="small" color={theme.tint} style={styles.sendArea} />
-            ) : (
-              inputText.trim().length > 0 && (
-                <Pressable
-                  onPress={() => handleSend()}
-                  style={[styles.sendBtn, { backgroundColor: theme.tint }]}
-                >
-                  <IconSymbol name="arrow.up.circle.fill" size={28} color="#FFFFFF" />
-                </Pressable>
-              )
-            )}
-          </View>
-        </Animated.View>
-      </View>
     </View>
   );
 }
@@ -269,6 +392,12 @@ const styles = StyleSheet.create({
     width: 44,
     height: 36,
     borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  plusIcon: {
+    width: 18,
+    height: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -289,18 +418,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sheetClip: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    overflow: 'hidden',
-    zIndex: 11,
-  },
-  sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+  sheetInline: {
     borderTopWidth: 1,
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -323,6 +441,12 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 16,
+    paddingVertical: 4,
+  },
+  recordingText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
     paddingVertical: 4,
   },
   sendBtn: {
