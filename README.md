@@ -1,5 +1,7 @@
 # Peachy Calendar App
 
+[![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/cyn900/d68af45e32e37603d0b690f9ef315fdd/raw/peachy-coverage.json)](https://github.com/YOUR_ORG/YOUR_REPO/actions)
+
 Intelligent mobile calendar with natural-language scheduling, shared calendars, and integrated messaging. Built with React Native (Expo) + AWS Serverless.
 
 ## Quick Start

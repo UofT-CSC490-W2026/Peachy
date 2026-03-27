@@ -14,6 +14,10 @@ jobs:
     name: Run Tests & Coverage
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      pull-requests: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,7 +35,7 @@ jobs:
         run: npm run lint
 
       - name: Unit & Component Tests (with coverage)
-        run: npm run test:coverage -- --ci
+        run: npm run test:coverage -- --ci --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -40,3 +44,30 @@ jobs:
           name: coverage-report
           path: coverage/
           retention-days: 14
+
+      - name: Post coverage comment on PR
+        uses: ArtiomTr/jest-coverage-report-action@v2
+        if: github.event_name == 'pull_request'
+        with:
+          coverage-file: coverage/coverage-summary.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract coverage percentage
+        if: github.ref == 'refs/heads/main'
+        id: coverage
+        run: |
+          PCT=$(node -e "const s=require('./coverage/coverage-summary.json');console.log(Math.round(s.total.lines.pct))")
+          echo "pct=$PCT" >> $GITHUB_OUTPUT
+
+      - name: Update coverage badge (main branch only)
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        if: github.ref == 'refs/heads/main'
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: ${{ secrets.GIST_ID }}
+          filename: peachy-coverage.json
+          label: coverage
+          message: ${{ steps.coverage.outputs.pct }}%
+          valColorRange: ${{ steps.coverage.outputs.pct }}
+          maxColorRange: 100
+          minColorRange: 50
