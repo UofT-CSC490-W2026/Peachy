@@ -1,4 +1,4 @@
-import { StyleSheet, View, Pressable, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
+import { StyleSheet, View, Pressable, ScrollView, Alert } from 'react-native';
 import { useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
@@ -8,7 +8,6 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useCalendar } from '@/contexts/calendar-context';
 import { UpcomingEvents } from '@/components/calendar/upcoming-events';
 import { PendingItems } from '@/components/pending-items';
-import { AiInputBar } from '@/components/ai-input-bar';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -43,46 +42,35 @@ export default function HomeScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.keyboardAvoid}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ThemedView style={styles.container}>
-        {/* Simple header */}
-        <View style={styles.header}>
-          <ThemedText type="title">Home</ThemedText>
-          <Pressable
-            style={[styles.addButton, { backgroundColor: tintColor }]}
-            onPress={() => router.push('/event-create')}
-          >
-            <IconSymbol name="plus" size={24} color="#FFFFFF" />
-          </Pressable>
-        </View>
+    <ThemedView style={styles.container}>
+      {/* Simple header */}
+      <View style={styles.header}>
+        <ThemedText type="title">Home</ThemedText>
+        <Pressable
+          style={[styles.addButton, { backgroundColor: tintColor }]}
+          onPress={() => router.push('/event-create')}
+        >
+          <IconSymbol name="plus" size={24} color="#FFFFFF" />
+        </Pressable>
+      </View>
 
-        {/* Scrollable content */}
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-          {/* Pending items */}
-          <PendingItems
-            items={displayedPendingItems}
-            onAccept={handleAccept}
-            onDecline={handleDecline}
-          />
+      {/* Scrollable content */}
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        {/* Pending items */}
+        <PendingItems
+          items={displayedPendingItems}
+          onAccept={handleAccept}
+          onDecline={handleDecline}
+        />
 
-          {/* Upcoming events timeline */}
-          <UpcomingEvents events={visibleEvents} calendars={calendars} />
-        </ScrollView>
-
-        {/* AI Input Bar */}
-        <AiInputBar />
-      </ThemedView>
-    </KeyboardAvoidingView>
+        {/* Upcoming events timeline */}
+        <UpcomingEvents events={visibleEvents} calendars={calendars} />
+      </ScrollView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  keyboardAvoid: {
-    flex: 1,
-  },
   container: {
     flex: 1,
   },

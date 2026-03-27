@@ -17,6 +17,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      checks: write
 
     steps:
       - name: Checkout
@@ -35,7 +36,7 @@ jobs:
         run: npm run lint
 
       - name: Unit & Component Tests (with coverage)
-        run: npm run test:coverage -- --ci --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text
+        run: npm run test:coverage -- --ci --json --outputFile=report.json --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -48,9 +49,12 @@ jobs:
       - name: Post coverage comment on PR
         uses: ArtiomTr/jest-coverage-report-action@v2
         if: github.event_name == 'pull_request'
+        continue-on-error: true
         with:
-          coverage-file: coverage/coverage-summary.json
+          coverage-file: report.json
+          base-coverage-file: report.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          skip-step: all
 
       - name: Extract coverage metrics
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'

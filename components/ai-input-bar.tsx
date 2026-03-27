@@ -1,12 +1,17 @@
 import { StyleSheet, View, TextInput, Pressable, Alert, Platform, ActivityIndicator } from 'react-native';
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
+import { Audio } from 'expo-av';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useAuth } from '@/contexts/auth-context';
+import { useCalendar } from '@/contexts/calendar-context';
 import { ApiError, AuthError } from '@/utils/api-client';
 import type { AIParseResult } from '@/utils/ai-parser';
+import { transcribeAudio } from '@/utils/audio-transcribe';
+import { getSlotIndex } from '@/utils/rl-helpers';
 
 interface AiInputBarProps {
   initialValue?: string;
@@ -14,11 +19,16 @@ interface AiInputBarProps {
 
 export function AiInputBar({ initialValue }: AiInputBarProps = {}) {
   const router = useRouter();
-  const { getIdToken } = useAuth();
+  const { user, getIdToken } = useAuth();
+  const { calendars, createEvent } = useCalendar();
   const [inputText, setInputText] = useState(initialValue ?? '');
   const [isLoading, setIsLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const recordingRef = useRef<Audio.Recording | null>(null);
   const surfaceColor = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
+  const dangerColor = useThemeColor({}, 'danger');
   const tintColor = useThemeColor({}, 'tint');
   const textColor = useThemeColor({}, 'text');
   const iconColor = useThemeColor({}, 'icon');
@@ -57,57 +67,152 @@ export function AiInputBar({ initialValue }: AiInputBarProps = {}) {
       }
 
       const parsed = await response.json() as AIParseResult;
+      const data = parsed.extractedData;
 
-      router.push({
-        pathname: '/event-create',
-        params: {
-          aiGenerated: 'true',
-          aiInput: trimmedInput,
-          title: parsed.extractedData.title || '',
-          startTime: parsed.extractedData.startTime || '',
-          endTime: parsed.extractedData.endTime || '',
-          isAllDay: parsed.extractedData.isAllDay ? 'true' : 'false',
-          location: parsed.extractedData.location || '',
-          inviteeIds: parsed.extractedData.invitedUserIds?.join(',') || '',
-          // Full response stored for RL tracking in event-create
-          aiSuggested: JSON.stringify(parsed),
-        },
+      const calendarId = calendars[0]?.id;
+      if (!calendarId) {
+        Alert.alert('No Calendar', 'Please create a calendar first before using AI scheduling.');
+        return;
+      }
+
+      await createEvent(calendarId, {
+        title: data.title || 'Untitled Event',
+        startTime: data.startTime,
+        endTime: data.endTime,
+        isAllDay: data.isAllDay ?? false,
+        timezone,
+        ...(data.location ? { location: data.location } : {}),
+        invitedUserIds: data.invitedUserIds || [],
+        aiGenerated: true,
+        aiInput: trimmedInput,
+        aiSuggested: parsed,
       });
 
+      // Fire-and-forget RL feedback — user accepted AI suggestion as-is
+      if (user && data.startTime) {
+        const suggestedSlotIndex = getSlotIndex(new Date(data.startTime));
+        fetch(`${apiUrl}/users/${encodeURIComponent(user.id)}/rl/feedback`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action: 'accept', suggestedSlotIndex }),
+        }).catch(() => {});
+      }
+
       setInputText('');
-    } catch {
-      Alert.alert('Error', 'Could not understand your request. Please try again.');
+      Alert.alert('Event Created', `"${data.title}" has been added to your calendar.`);
+    } catch (err) {
+      console.error('AI send error:', err);
+      Alert.alert('Error', 'Could not create event. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleMic = () => {
-    Alert.alert('Voice Input', 'Voice input coming soon! For now, try typing:\n\n• "dinner with Jordan tomorrow at 7pm"\n• "meeting with Taylor next Monday 2pm"\n• "lunch Friday at noon"', [{ text: 'OK' }]);
-  };
+  const startRecording = useCallback(async () => {
+    try {
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Microphone access is needed for voice input.');
+        return;
+      }
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY,
+      );
+      recordingRef.current = recording;
+      setIsRecording(true);
+    } catch {
+      Alert.alert('Error', 'Could not start recording. Please try again.');
+    }
+  }, []);
+
+  const stopRecording = useCallback(async () => {
+    const recording = recordingRef.current;
+    if (!recording) return;
+
+    setIsRecording(false);
+    setIsTranscribing(true);
+    try {
+      await recording.stopAndUnloadAsync();
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+      const uri = recording.getURI();
+      recordingRef.current = null;
+      if (!uri) throw new Error('No recording URI');
+
+      const transcript = await transcribeAudio(uri, getIdToken);
+      if (transcript.trim()) {
+        setInputText(prev => prev ? `${prev} ${transcript.trim()}` : transcript.trim());
+      } else {
+        Alert.alert('No Speech Detected', 'Could not detect any speech. Please try again.');
+      }
+    } catch (err) {
+      if (err instanceof AuthError) {
+        Alert.alert('Session Expired', 'Please log in again.');
+      } else {
+        Alert.alert('Transcription Failed', err instanceof Error ? err.message : 'Please try again.');
+      }
+    } finally {
+      setIsTranscribing(false);
+    }
+  }, [getIdToken]);
+
+  const handleMic = useCallback(() => {
+    if (isTranscribing || isLoading) return;
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  }, [isRecording, isTranscribing, isLoading, startRecording, stopRecording]);
+
+  // Cleanup recording on unmount
+  useEffect(() => {
+    return () => {
+      if (recordingRef.current) {
+        recordingRef.current.stopAndUnloadAsync().catch(() => {});
+      }
+    };
+  }, []);
 
   return (
     <View style={[styles.container, { backgroundColor: surfaceColor, borderTopColor: borderColor }]}>
-      <View style={[styles.inputContainer, { backgroundColor: surfaceColor, borderColor }]}>
-        <Pressable onPress={handleMic} style={styles.micButton} disabled={isLoading}>
-          <IconSymbol name="mic.fill" size={20} color={iconColor} />
-        </Pressable>
-        <TextInput
-          style={[styles.input, { color: textColor }]}
-          placeholder="Schedule with AI..."
-          placeholderTextColor={iconColor}
-          value={inputText}
-          onChangeText={setInputText}
-          onSubmitEditing={handleSend}
-          returnKeyType="send"
-          multiline={false}
-          editable={!isLoading}
-        />
+      <View style={[styles.inputContainer, { backgroundColor: surfaceColor, borderColor: isRecording ? dangerColor : borderColor }]}>
+        {isTranscribing ? (
+          <ActivityIndicator size="small" color={tintColor} style={styles.micButton} />
+        ) : (
+          <Pressable onPress={handleMic} style={styles.micButton} disabled={isLoading}>
+            <IconSymbol
+              name={isRecording ? 'stop.fill' : 'mic.fill'}
+              size={20}
+              color={isRecording ? dangerColor : iconColor}
+            />
+          </Pressable>
+        )}
+        {isRecording ? (
+          <ThemedText style={[styles.recordingText, { color: dangerColor }]}>
+            Recording... tap stop when done
+          </ThemedText>
+        ) : (
+          <TextInput
+            style={[styles.input, { color: textColor }]}
+            placeholder={isTranscribing ? 'Transcribing...' : 'Schedule with AI...'}
+            placeholderTextColor={iconColor}
+            value={inputText}
+            onChangeText={setInputText}
+            onSubmitEditing={handleSend}
+            returnKeyType="send"
+            multiline={false}
+            editable={!isLoading && !isTranscribing}
+          />
+        )}
         {isLoading ? (
           <ActivityIndicator size="small" color={tintColor} style={styles.loader} />
         ) : (
-          inputText.trim().length > 0 && (
-            <Pressable onPress={handleSend} style={[styles.sendButton, { backgroundColor: tintColor }]}>
+          !isRecording && inputText.trim().length > 0 && (
+            <Pressable onPress={handleSend} style={[styles.sendButton, { backgroundColor: tintColor }]} disabled={isTranscribing}>
               <IconSymbol name="arrow.up.circle.fill" size={28} color="#FFFFFF" />
             </Pressable>
           )
@@ -142,6 +247,12 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 16,
+    paddingVertical: 4,
+  },
+  recordingText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
     paddingVertical: 4,
   },
   sendButton: {

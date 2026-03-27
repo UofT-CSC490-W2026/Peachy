@@ -4,6 +4,16 @@ import { screen, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { renderWithProviders } from '../test-utils';
 import { AiInputBar } from '@/components/ai-input-bar';
 
+// Mock expo-av (native audio module unavailable in Jest)
+jest.mock('expo-av', () => ({
+  Audio: {
+    Recording: { createAsync: jest.fn().mockResolvedValue({ recording: { stopAndUnloadAsync: jest.fn().mockResolvedValue(undefined), getURI: jest.fn().mockReturnValue('file://recording.m4a') } }) },
+    RecordingOptionsPresets: { HIGH_QUALITY: {} },
+    requestPermissionsAsync: jest.fn().mockResolvedValue({ status: 'granted' }),
+    setAudioModeAsync: jest.fn(),
+  },
+}));
+
 const mockPush = jest.fn();
 
 jest.mock('expo-router', () => ({
@@ -15,7 +25,24 @@ jest.mock('expo-constants', () => ({
 }));
 
 jest.mock('@/contexts/auth-context', () => ({
-  useAuth: () => ({ getIdToken: jest.fn().mockResolvedValue('mock-token'), logout: jest.fn() }),
+  useAuth: () => ({ user: { id: 'u1' }, getIdToken: jest.fn().mockResolvedValue('mock-token'), logout: jest.fn() }),
+}));
+
+const mockCreateEvent = jest.fn().mockResolvedValue({});
+jest.mock('@/contexts/calendar-context', () => ({
+  useCalendar: () => ({ calendars: [{ id: 'cal-1', name: 'Personal' }], createEvent: mockCreateEvent }),
+}));
+
+jest.mock('@/utils/audio-transcribe', () => ({
+  transcribeAudio: jest.fn().mockResolvedValue('transcribed text'),
+}));
+
+jest.mock('@/utils/api-client', () => ({
+  ApiError: class ApiError extends Error {
+    statusCode: number;
+    constructor(message: string, statusCode: number) { super(message); this.statusCode = statusCode; }
+  },
+  AuthError: class AuthError extends Error {},
 }));
 
 beforeEach(() => {
@@ -70,9 +97,7 @@ describe('AiInputBar', () => {
     fireEvent(input, 'submitEditing');
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith(
-        expect.objectContaining({ pathname: '/event-create' })
-      );
+      expect(mockCreateEvent).toHaveBeenCalled();
     });
   });
 
@@ -111,17 +136,16 @@ describe('AiInputBar', () => {
   it('does not call fetch when input is empty', async () => {
     renderWithProviders(<AiInputBar />);
     fireEvent(screen.getByPlaceholderText('Schedule with AI...'), 'submitEditing');
-    // Give async handleSend a chance to run
     await act(async () => {});
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('shows voice input alert when mic button pressed', async () => {
-    const alertSpy = jest.spyOn(Alert, 'alert');
+  it('starts recording when mic button pressed', async () => {
+    const { Audio } = require('expo-av');
     renderWithProviders(<AiInputBar />);
-    // Mic icon is the first symbol-view in the component
     const icons = screen.getAllByTestId('symbol-view');
     await act(async () => { fireEvent.press(icons[0]); });
-    expect(alertSpy).toHaveBeenCalledWith('Voice Input', expect.any(String), expect.any(Array));
+    expect(Audio.requestPermissionsAsync).toHaveBeenCalled();
+    expect(Audio.Recording.createAsync).toHaveBeenCalled();
   });
 });
