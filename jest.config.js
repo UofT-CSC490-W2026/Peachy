@@ -18,6 +18,7 @@ const config = {
       '|expo-constants' +
       '|@expo' +
       '|expo-symbols' +
+      '|expo-av' +
     ')/)',
   ],
   moduleNameMapper: {

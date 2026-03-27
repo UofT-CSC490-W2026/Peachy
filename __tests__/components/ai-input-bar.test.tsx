@@ -3,6 +3,14 @@ import { screen, fireEvent } from '@testing-library/react-native';
 import { renderWithProviders } from '../test-utils';
 import { AiInputBar } from '@/components/ai-input-bar';
 
+// Mock expo-av (native audio module unavailable in Jest)
+jest.mock('expo-av', () => ({
+  Audio: {
+    Recording: jest.fn(),
+    setAudioModeAsync: jest.fn(),
+  },
+}));
+
 // Mock expo-router
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
@@ -15,7 +23,23 @@ jest.mock('expo-constants', () => ({
 
 // Mock auth context
 jest.mock('@/contexts/auth-context', () => ({
-  useAuth: () => ({ getIdToken: jest.fn().mockResolvedValue('mock-token'), logout: jest.fn() }),
+  useAuth: () => ({ user: { id: 'u1' }, getIdToken: jest.fn().mockResolvedValue('mock-token'), logout: jest.fn() }),
+}));
+
+// Mock calendar context
+jest.mock('@/contexts/calendar-context', () => ({
+  useCalendar: () => ({ calendars: [], createEvent: jest.fn() }),
+}));
+
+// Mock audio transcribe
+jest.mock('@/utils/audio-transcribe', () => ({
+  transcribeAudio: jest.fn(),
+}));
+
+// Mock api-client error classes
+jest.mock('@/utils/api-client', () => ({
+  ApiError: class ApiError extends Error {},
+  AuthError: class AuthError extends Error {},
 }));
 
 describe('AiInputBar', () => {
