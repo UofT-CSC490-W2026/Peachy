@@ -36,4 +36,14 @@ describe('AuthButton', () => {
     renderWithProviders(<AuthButton title="Cancel" onPress={jest.fn()} variant="outline" />);
     expect(screen.getByText('Cancel')).toBeTruthy();
   });
+
+  it('shows loading indicator for outline variant', () => {
+    renderWithProviders(<AuthButton title="Cancel" onPress={jest.fn()} variant="outline" loading />);
+    expect(screen.queryByText('Cancel')).toBeNull();
+  });
+
+  it('shows loading indicator for google variant', () => {
+    renderWithProviders(<AuthButton title="Sign in" onPress={jest.fn()} variant="google" loading />);
+    expect(screen.queryByText('Sign in')).toBeNull();
+  });
 });

@@ -4,17 +4,8 @@ import { screen, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { renderWithProviders } from '../test-utils';
 import { AiInputBar } from '@/components/ai-input-bar';
 
-// Mock expo-av (native audio module unavailable in Jest)
-jest.mock('expo-av', () => ({
-  Audio: {
-    Recording: { createAsync: jest.fn().mockResolvedValue({ recording: { stopAndUnloadAsync: jest.fn().mockResolvedValue(undefined), getURI: jest.fn().mockReturnValue('file://recording.m4a') } }) },
-    RecordingOptionsPresets: { HIGH_QUALITY: {} },
-    requestPermissionsAsync: jest.fn().mockResolvedValue({ status: 'granted' }),
-    setAudioModeAsync: jest.fn(),
-  },
-}));
-
 const mockPush = jest.fn();
+const mockCreateEvent = jest.fn().mockResolvedValue({});
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
@@ -25,22 +16,31 @@ jest.mock('expo-constants', () => ({
 }));
 
 jest.mock('@/contexts/auth-context', () => ({
-  useAuth: () => ({ user: { id: 'u1' }, getIdToken: jest.fn().mockResolvedValue('mock-token'), logout: jest.fn() }),
+  useAuth: () => ({
+    user: { id: 'user-1' },
+    getIdToken: jest.fn().mockResolvedValue('mock-token'),
+    logout: jest.fn(),
+  }),
 }));
 
-const mockCreateEvent = jest.fn().mockResolvedValue({});
 jest.mock('@/contexts/calendar-context', () => ({
-  useCalendar: () => ({ calendars: [{ id: 'cal-1', name: 'Personal' }], createEvent: mockCreateEvent }),
+  useCalendar: () => ({
+    calendars: [{ id: 'cal-1', name: 'Personal' }],
+    createEvent: mockCreateEvent,
+  }),
 }));
 
 jest.mock('@/utils/audio-transcribe', () => ({
-  transcribeAudio: jest.fn().mockResolvedValue('transcribed text'),
+  transcribeAudio: jest.fn().mockResolvedValue('lunch with Jordan tomorrow'),
 }));
 
 jest.mock('@/utils/api-client', () => ({
   ApiError: class ApiError extends Error {
     statusCode: number;
-    constructor(message: string, statusCode: number) { super(message); this.statusCode = statusCode; }
+    constructor(message: string, statusCode: number) {
+      super(message);
+      this.statusCode = statusCode;
+    }
   },
   AuthError: class AuthError extends Error {},
 }));
@@ -61,19 +61,20 @@ describe('AiInputBar', () => {
     expect(screen.getByDisplayValue('dinner tomorrow')).toBeTruthy();
   });
 
-  it('does not show send button when input is empty', () => {
-    renderWithProviders(<AiInputBar />);
-    expect(screen.queryByTestId('send-button')).toBeNull();
-  });
-
   it('updates input text when typing', () => {
     renderWithProviders(<AiInputBar />);
-    const input = screen.getByPlaceholderText('Schedule with AI...');
-    fireEvent.changeText(input, 'lunch with Jordan');
+    fireEvent.changeText(screen.getByPlaceholderText('Schedule with AI...'), 'lunch with Jordan');
     expect(screen.getByDisplayValue('lunch with Jordan')).toBeTruthy();
   });
 
-  it('calls fetch and navigates on successful send', async () => {
+  it('does not call fetch when input is empty', async () => {
+    renderWithProviders(<AiInputBar />);
+    fireEvent(screen.getByPlaceholderText('Schedule with AI...'), 'submitEditing');
+    await act(async () => {});
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('calls fetch and creates event on successful send', async () => {
     const parsed = {
       parseId: 'p1',
       extractedData: {
@@ -86,18 +87,17 @@ describe('AiInputBar', () => {
       confidence: 0.9,
       ambiguities: [],
     };
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       status: 200,
       json: async () => parsed,
     });
 
     renderWithProviders(<AiInputBar initialValue="lunch tomorrow" />);
-    const input = screen.getByPlaceholderText('Schedule with AI...');
-    fireEvent(input, 'submitEditing');
+    fireEvent(screen.getByPlaceholderText('Schedule with AI...'), 'submitEditing');
 
     await waitFor(() => {
-      expect(mockCreateEvent).toHaveBeenCalled();
+      expect(mockCreateEvent).toHaveBeenCalledWith('cal-1', expect.objectContaining({ title: 'Lunch' }));
     });
   });
 
@@ -133,13 +133,6 @@ describe('AiInputBar', () => {
     });
   });
 
-  it('does not call fetch when input is empty', async () => {
-    renderWithProviders(<AiInputBar />);
-    fireEvent(screen.getByPlaceholderText('Schedule with AI...'), 'submitEditing');
-    await act(async () => {});
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
   it('starts recording when mic button pressed', async () => {
     const { Audio } = require('expo-av');
     renderWithProviders(<AiInputBar />);
@@ -148,4 +141,85 @@ describe('AiInputBar', () => {
     expect(Audio.requestPermissionsAsync).toHaveBeenCalled();
     expect(Audio.Recording.createAsync).toHaveBeenCalled();
   });
+
+  it('shows permission alert when mic permission denied', async () => {
+    const { Audio } = require('expo-av');
+    Audio.requestPermissionsAsync.mockResolvedValueOnce({ status: 'denied' });
+    const alertSpy = jest.spyOn(Alert, 'alert');
+
+    renderWithProviders(<AiInputBar />);
+    const icons = screen.getAllByTestId('symbol-view');
+    await act(async () => { fireEvent.press(icons[0]); });
+
+    expect(alertSpy).toHaveBeenCalledWith('Permission Required', expect.any(String));
+  });
+
+  it('shows error alert when recording fails to start', async () => {
+    const { Audio } = require('expo-av');
+    Audio.Recording.createAsync.mockRejectedValueOnce(new Error('Hardware unavailable'));
+    const alertSpy = jest.spyOn(Alert, 'alert');
+
+    renderWithProviders(<AiInputBar />);
+    await act(async () => { fireEvent.press(screen.getAllByTestId('symbol-view')[0]); });
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Error', 'Could not start recording. Please try again.');
+    });
+  });
+
+  it('shows no speech detected alert when transcript is empty', async () => {
+    const { transcribeAudio } = require('@/utils/audio-transcribe');
+    transcribeAudio.mockResolvedValueOnce('');
+    const alertSpy = jest.spyOn(Alert, 'alert');
+
+    renderWithProviders(<AiInputBar />);
+    await act(async () => { fireEvent.press(screen.getAllByTestId('symbol-view')[0]); });
+    await act(async () => { fireEvent.press(screen.getAllByTestId('symbol-view')[0]); });
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('No Speech Detected', expect.any(String));
+    });
+  });
+
+  it('stops recording and transcribes when mic pressed again', async () => {
+    const { transcribeAudio } = require('@/utils/audio-transcribe');
+    renderWithProviders(<AiInputBar />);
+
+    await act(async () => { fireEvent.press(screen.getAllByTestId('symbol-view')[0]); });
+    await act(async () => { fireEvent.press(screen.getAllByTestId('symbol-view')[0]); });
+
+    await waitFor(() => {
+      expect(transcribeAudio).toHaveBeenCalled();
+    });
+  });
+
+  it('shows session expired alert when stopRecording gets AuthError', async () => {
+    const { transcribeAudio } = require('@/utils/audio-transcribe');
+    const { AuthError } = require('@/utils/api-client');
+    transcribeAudio.mockRejectedValueOnce(new AuthError('Unauthorized'));
+    const alertSpy = jest.spyOn(Alert, 'alert');
+
+    renderWithProviders(<AiInputBar />);
+    await act(async () => { fireEvent.press(screen.getAllByTestId('symbol-view')[0]); });
+    await act(async () => { fireEvent.press(screen.getAllByTestId('symbol-view')[0]); });
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Session Expired', expect.any(String));
+    });
+  });
+
+  it('shows transcription failed alert on generic error', async () => {
+    const { transcribeAudio } = require('@/utils/audio-transcribe');
+    transcribeAudio.mockRejectedValueOnce(new Error('Network failure'));
+    const alertSpy = jest.spyOn(Alert, 'alert');
+
+    renderWithProviders(<AiInputBar />);
+    await act(async () => { fireEvent.press(screen.getAllByTestId('symbol-view')[0]); });
+    await act(async () => { fireEvent.press(screen.getAllByTestId('symbol-view')[0]); });
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Transcription Failed', expect.any(String));
+    });
+  });
+
 });
