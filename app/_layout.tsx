@@ -69,7 +69,7 @@ function RootNavigator() {
 
         if (data?.type === 'event_invite' && data.eventId) {
           // Deep-link directly to the event detail
-          router.push({ pathname: '/event-detail', params: { id: data.eventId } });
+          router.push({ pathname: '/event-detail', params: { id: data.eventId, calendarId: data.calendarId } });
         } else {
           // Default: go to Home tab where pending items are listed
           router.replace('/(tabs)');

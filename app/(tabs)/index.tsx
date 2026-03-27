@@ -1,6 +1,7 @@
-import { StyleSheet, View, Pressable, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
-import { useMemo } from 'react';
+import { StyleSheet, View, Pressable, KeyboardAvoidingView, Platform, ScrollView, Alert, RefreshControl } from 'react-native';
+import { useMemo, useCallback, useState } from 'react';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -12,8 +13,27 @@ import { AiInputBar } from '@/components/ai-input-bar';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { calendars, visibleEvents, pendingItems, acceptPendingItem, declinePendingItem } = useCalendar();
+  const { calendars, visibleEvents, pendingItems, acceptPendingItem, declinePendingItem, refreshCalendars, refreshPendingItems } = useCalendar();
   const tintColor = useThemeColor({}, 'tint');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Refresh pending items every time the Home tab comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      refreshPendingItems();
+    }, [refreshPendingItems])
+  );
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      // Refresh both in parallel: calendars+events AND pending items independently
+      // so the generation counter in loadData doesn't skip the pending items fetch
+      await Promise.all([refreshCalendars(), refreshPendingItems()]);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refreshCalendars, refreshPendingItems]);
 
   // All items fetched are already 'pending' status — no need to filter
   const displayedPendingItems = useMemo(() => pendingItems, [pendingItems]);
@@ -60,7 +80,17 @@ export default function HomeScreen() {
         </View>
 
         {/* Scrollable content */}
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor={tintColor}
+            />
+          }
+        >
           {/* Pending items */}
           <PendingItems
             items={displayedPendingItems}

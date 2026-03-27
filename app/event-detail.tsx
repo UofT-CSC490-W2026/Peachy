@@ -1,4 +1,5 @@
-import { StyleSheet, View, ScrollView, Pressable, Alert } from 'react-native';
+import { StyleSheet, View, ScrollView, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 
 import { ThemedView } from '@/components/themed-view';
@@ -7,20 +8,40 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useCalendar } from '@/contexts/calendar-context';
 import { useAuth } from '@/contexts/auth-context';
-import { AuthError } from '@/utils/api-client';
+import { AuthError, createApiClient } from '@/utils/api-client';
 import { formatDateRange } from '@/utils/date-helpers';
+import type { CalendarEvent } from '@/types';
 
 export default function EventDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const eventId = params.id as string;
+  const calendarIdParam = params.calendarId as string | undefined;
 
   const { calendars, events, deleteEvent, getUser } = useCalendar();
-  const { logout, user } = useAuth();
+  const { logout, user, getIdToken } = useAuth();
 
-  const event = events.find(e => e.id === eventId);
+  const localEvent = events.find(e => e.id === eventId);
+  // Start in fetching state if the event isn't local and we have enough info to fetch
+  const needsFetch = !localEvent && !!eventId && !!calendarIdParam;
+  const [fetchedEvent, setFetchedEvent] = useState<CalendarEvent | null>(null);
+  const [isFetching, setIsFetching] = useState(needsFetch);
+
+  const event = localEvent ?? fetchedEvent;
   const calendar = event ? calendars.find(c => c.id === event.calendarId) : null;
   const isOwner = event && user && event.createdBy === user.id;
+
+  // Fetch from API when event is not in local state (e.g. pending invite)
+  useEffect(() => {
+    if (!needsFetch) return;
+    setIsFetching(true);
+    const apiClient = createApiClient(getIdToken);
+    apiClient.get<CalendarEvent>(`calendars/${calendarIdParam!}/events/${eventId}`)
+      .then(setFetchedEvent)
+      .catch(() => {/* show not found below */})
+      .finally(() => setIsFetching(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, calendarIdParam]);
 
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');
@@ -28,13 +49,27 @@ export default function EventDetailScreen() {
   const textSecondary = useThemeColor({}, 'textSecondary');
   const dangerColor = useThemeColor({}, 'danger');
 
-  if (!event || !calendar) {
+  if (isFetching) {
     return (
-      <ThemedView style={styles.container}>
-        <ThemedText>Event not found</ThemedText>
+      <ThemedView style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator size="large" color={tintColor} />
       </ThemedView>
     );
   }
+
+  if (!event) {
+    return (
+      <ThemedView style={styles.container}>
+        <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <IconSymbol name="chevron.left" size={28} color={tintColor} />
+        </Pressable>
+        <ThemedText style={{ textAlign: 'center', marginTop: 40 }}>Event not found</ThemedText>
+      </ThemedView>
+    );
+  }
+
+  // For invited events not yet on a local calendar, show a placeholder color
+  const calendarColor = calendar?.color ?? tintColor;
 
   const startTime = new Date(event.startTime);
   const endTime = new Date(event.endTime);
@@ -104,13 +139,13 @@ export default function EventDetailScreen() {
 
         {/* Title with calendar color */}
         <View style={styles.titleSection}>
-          <View style={[styles.colorBar, { backgroundColor: calendar.color }]} />
+          <View style={[styles.colorBar, { backgroundColor: calendarColor }]} />
           <View style={styles.titleContent}>
             <ThemedText type="title" style={styles.title}>
               {event.title}
             </ThemedText>
-            <ThemedText style={[styles.calendarName, { color: calendar.color }]}>
-              {calendar.name}
+            <ThemedText style={[styles.calendarName, { color: calendarColor }]}>
+              {calendar?.name ?? 'Invited Event'}
             </ThemedText>
           </View>
         </View>

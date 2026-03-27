@@ -323,7 +323,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       const data = await apiClient.get<{ items: PendingItem[] }>('pending-items?status=pending');
       setPendingItems(data.items);
     } catch (err) {
-      console.error('Failed to refresh pending items:', err);
+      console.error('[refreshPendingItems] failed:', err);
     }
   }, [apiClient]);
 
@@ -334,12 +334,13 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     ));
     try {
       await apiClient.post(`pending-items/${itemId}/accept`, { ...(sk ? { sk } : {}) });
-      await refreshPendingItems();
+      // Reload calendars + events so the accepted event appears immediately
+      await loadData();
     } catch (err) {
       await refreshPendingItems(); // revert
       throw err;
     }
-  }, [apiClient, refreshPendingItems]);
+  }, [apiClient, loadData, refreshPendingItems]);
 
   const declinePendingItem = useCallback(async (itemId: string, sk?: string) => {
     setPendingItems(prev => prev.map(item =>

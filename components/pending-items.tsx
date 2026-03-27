@@ -30,7 +30,7 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
     if (item.type === 'event_invite' && item.eventId) {
       router.push({
         pathname: '/event-detail',
-        params: { id: item.eventId },
+        params: { id: item.eventId, calendarId: item.calendarId },
       });
     }
   };

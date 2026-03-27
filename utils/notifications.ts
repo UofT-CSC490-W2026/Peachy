@@ -59,23 +59,23 @@ export async function registerForPushNotifications(): Promise<string | null> {
 
 /**
  * Configures how notifications appear when the app is in the foreground.
- * Call this once at app startup (before any notifications can arrive).
+ * Must use a synchronous require so the handler is registered before any
+ * notification arrives — an async import() resolves too late.
  */
-export async function configureNotificationHandler(): Promise<void> {
-  let Notifications: typeof import('expo-notifications');
+export function configureNotificationHandler(): void {
   try {
-    Notifications = await import('expo-notifications');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Notifications = require('expo-notifications');
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
   } catch {
-    return;
+    // expo-notifications not installed — foreground banners disabled
   }
-
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
 }

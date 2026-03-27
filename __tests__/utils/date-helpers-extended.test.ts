@@ -265,11 +265,12 @@ describe('formatDateSectionHeader', () => {
   });
 
   it('returns formatted date for other days', () => {
-    const date = new Date('2026-03-25T12:00:00');
+    // Use a fixed date well in the future so it never matches "Today"/"Tomorrow"
+    const date = new Date('2030-06-15T12:00:00');
     const result = formatDateSectionHeader(date);
-    expect(result).toMatch(/Wed/);
-    expect(result).toMatch(/March/);
-    expect(result).toMatch(/25/);
+    expect(result).toMatch(/Sat/);
+    expect(result).toMatch(/June/);
+    expect(result).toMatch(/15/);
   });
 });
 
