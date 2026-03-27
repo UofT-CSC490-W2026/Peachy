@@ -14,6 +14,10 @@ jobs:
     name: Run Tests & Coverage
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      pull-requests: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,7 +35,7 @@ jobs:
         run: npm run lint
 
       - name: Unit & Component Tests (with coverage)
-        run: npm run test:coverage -- --ci
+        run: npm run test:coverage -- --ci --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -40,3 +44,75 @@ jobs:
           name: coverage-report
           path: coverage/
           retention-days: 14
+
+      - name: Post coverage comment on PR
+        uses: ArtiomTr/jest-coverage-report-action@v2
+        if: github.event_name == 'pull_request'
+        with:
+          coverage-file: coverage/coverage-summary.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract coverage metrics
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        id: coverage
+        run: |
+          node -e "
+            const s = require('./coverage/coverage-summary.json').total;
+            const pct = (key) => Math.round(s[key].pct);
+            console.log('lines=' + pct('lines'));
+            console.log('statements=' + pct('statements'));
+            console.log('functions=' + pct('functions'));
+            console.log('branches=' + pct('branches'));
+          " >> $GITHUB_OUTPUT
+
+      - name: Badge — Lines
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: ${{ secrets.GIST_ID }}
+          filename: peachy-coverage-lines.json
+          label: lines
+          message: ${{ steps.coverage.outputs.lines }}%
+          valColorRange: ${{ steps.coverage.outputs.lines }}
+          maxColorRange: 100
+          minColorRange: 50
+
+      - name: Badge — Statements
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: ${{ secrets.GIST_ID }}
+          filename: peachy-coverage-statements.json
+          label: statements
+          message: ${{ steps.coverage.outputs.statements }}%
+          valColorRange: ${{ steps.coverage.outputs.statements }}
+          maxColorRange: 100
+          minColorRange: 50
+
+      - name: Badge — Functions
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: ${{ secrets.GIST_ID }}
+          filename: peachy-coverage-functions.json
+          label: functions
+          message: ${{ steps.coverage.outputs.functions }}%
+          valColorRange: ${{ steps.coverage.outputs.functions }}
+          maxColorRange: 100
+          minColorRange: 50
+
+      - name: Badge — Branches
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: ${{ secrets.GIST_ID }}
+          filename: peachy-coverage-branches.json
+          label: branches
+          message: ${{ steps.coverage.outputs.branches }}%
+          valColorRange: ${{ steps.coverage.outputs.branches }}
+          maxColorRange: 100
+          minColorRange: 50

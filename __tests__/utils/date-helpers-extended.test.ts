@@ -212,6 +212,20 @@ describe('getEventsForTomorrow', () => {
   it('returns empty for no events', () => {
     expect(getEventsForTomorrow([])).toHaveLength(0);
   });
+
+  it('sorts multiple tomorrow events by start time', () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const late = new Date(tomorrow); late.setHours(15, 0, 0, 0);
+    const early = new Date(tomorrow); early.setHours(8, 0, 0, 0);
+    const lateEnd = new Date(late); lateEnd.setHours(16);
+    const earlyEnd = new Date(early); earlyEnd.setHours(9);
+    const e1 = makeEvent(late.toISOString(), lateEnd.toISOString(), 'late');
+    const e2 = makeEvent(early.toISOString(), earlyEnd.toISOString(), 'early');
+    const result = getEventsForTomorrow([e1, e2]);
+    expect(result[0].id).toBe('early');
+    expect(result[1].id).toBe('late');
+  });
 });
 
 // ── getEventsThisWeek ────────────────────────────────────────────────────────
@@ -248,6 +262,19 @@ describe('getEventsThisWeek', () => {
 
   it('returns empty for no events', () => {
     expect(getEventsThisWeek([])).toHaveLength(0);
+  });
+
+  it('sorts multiple this-week events by start time', () => {
+    const base = new Date();
+    const late = new Date(base); late.setDate(late.getDate() + 5); late.setHours(15, 0, 0, 0);
+    const early = new Date(base); early.setDate(early.getDate() + 3); early.setHours(8, 0, 0, 0);
+    const lateEnd = new Date(late); lateEnd.setHours(16);
+    const earlyEnd = new Date(early); earlyEnd.setHours(9);
+    const e1 = makeEvent(late.toISOString(), lateEnd.toISOString(), 'late');
+    const e2 = makeEvent(early.toISOString(), earlyEnd.toISOString(), 'early');
+    const result = getEventsThisWeek([e1, e2]);
+    expect(result[0].id).toBe('early');
+    expect(result[1].id).toBe('late');
   });
 });
 
