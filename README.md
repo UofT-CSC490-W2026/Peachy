@@ -1,5 +1,6 @@
 # Peachy Calendar App
 
+**Test Coverage:**
 [![Lines](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/cyn900/d68af45e32e37603d0b690f9ef315fdd/raw/peachy-coverage-lines.json)](https://github.com/UofT-CSC490-W2026/Peachy/actions)
 [![Statements](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/cyn900/d68af45e32e37603d0b690f9ef315fdd/raw/peachy-coverage-statements.json)](https://github.com/UofT-CSC490-W2026/Peachy/actions)
 [![Functions](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/cyn900/d68af45e32e37603d0b690f9ef315fdd/raw/peachy-coverage-functions.json)](https://github.com/UofT-CSC490-W2026/Peachy/actions)
