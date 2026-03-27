@@ -1,9 +1,9 @@
 # Peachy Calendar App
 
-[![Lines](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/cyn900/d68af45e32e37603d0b690f9ef315fdd/raw/peachy-coverage-lines.json)](https://github.com/YOUR_ORG/YOUR_REPO/actions)
-[![Statements](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/cyn900/d68af45e32e37603d0b690f9ef315fdd/raw/peachy-coverage-statements.json)](https://github.com/YOUR_ORG/YOUR_REPO/actions)
-[![Functions](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/cyn900/d68af45e32e37603d0b690f9ef315fdd/raw/peachy-coverage-functions.json)](https://github.com/YOUR_ORG/YOUR_REPO/actions)
-[![Branches](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/cyn900/d68af45e32e37603d0b690f9ef315fdd/raw/peachy-coverage-branches.json)](https://github.com/YOUR_ORG/YOUR_REPO/actions)
+[![Lines](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/cyn900/d68af45e32e37603d0b690f9ef315fdd/raw/peachy-coverage-lines.json)](https://github.com/UofT-CSC490-W2026/Peachy/actions)
+[![Statements](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/cyn900/d68af45e32e37603d0b690f9ef315fdd/raw/peachy-coverage-statements.json)](https://github.com/UofT-CSC490-W2026/Peachy/actions)
+[![Functions](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/cyn900/d68af45e32e37603d0b690f9ef315fdd/raw/peachy-coverage-functions.json)](https://github.com/UofT-CSC490-W2026/Peachy/actions)
+[![Branches](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/cyn900/d68af45e32e37603d0b690f9ef315fdd/raw/peachy-coverage-branches.json)](https://github.com/UofT-CSC490-W2026/Peachy/actions)
 
 Intelligent mobile calendar with natural-language scheduling, shared calendars, and integrated messaging. Built with React Native (Expo) + AWS Serverless.
 
