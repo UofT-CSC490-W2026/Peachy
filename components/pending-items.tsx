@@ -43,6 +43,8 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
         return 'bell';
       case 'event_update':
         return 'bell';
+      case 'friend_request':
+        return 'person.2';
       default:
         return 'bell';
     }
@@ -82,6 +84,14 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
           description: `"${event.title}" has been updated`,
         };
       }
+    }
+
+    if (item.type === 'friend_request') {
+      const sender = getUser(item.fromUserId);
+      return {
+        title: 'Friend Request',
+        description: sender ? `${sender.name} wants to be friends` : 'Someone wants to be friends',
+      };
     }
 
     return {

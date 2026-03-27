@@ -1,20 +1,24 @@
-import { StyleSheet, View, FlatList, Pressable } from 'react-native';
+import { StyleSheet, View, FlatList, Pressable, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { Chat } from '@/types';
-import { mockChats, mockCalendars } from '@/data/mock-data';
+import { useChat } from '@/contexts/chat-context';
+import { useCalendar } from '@/contexts/calendar-context';
 
 export default function ChatScreen() {
   const router = useRouter();
+  const { chats, messageRequests, requestCount, isLoading, refreshChats } = useChat();
+  const { calendars } = useCalendar();
   const surfaceColor = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
   const textSecondary = useThemeColor({}, 'textSecondary');
   const tintColor = useThemeColor({}, 'tint');
+  const dangerColor = useThemeColor({}, 'danger');
 
-  const formatTime = (timestamp: string) => {
+  const formatTime = (timestamp?: string) => {
+    if (!timestamp) return '';
     const date = new Date(timestamp);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
@@ -31,11 +35,11 @@ export default function ChatScreen() {
 
   const getCalendarColor = (calendarId?: string) => {
     if (!calendarId) return undefined;
-    const calendar = mockCalendars.find(cal => cal.id === calendarId);
+    const calendar = calendars.find((cal: any) => cal.id === calendarId);
     return calendar?.color;
   };
 
-  const renderChat = ({ item }: { item: Chat }) => {
+  const renderChat = ({ item }: { item: any }) => {
     const calendarColor = getCalendarColor(item.calendarId);
 
     return (
@@ -63,9 +67,9 @@ export default function ChatScreen() {
             <ThemedText type="defaultSemiBold" style={styles.chatName}>
               {item.name}
             </ThemedText>
-            {item.lastMessage && (
+            {item.lastMessageTime && (
               <ThemedText style={[styles.timestamp, { color: textSecondary }]}>
-                {formatTime(item.lastMessage.createdAt)}
+                {formatTime(item.lastMessageTime)}
               </ThemedText>
             )}
           </View>
@@ -75,7 +79,7 @@ export default function ChatScreen() {
                 style={[styles.lastMessage, { color: textSecondary }]}
                 numberOfLines={1}
               >
-                {item.lastMessage.content}
+                {item.lastMessage}
               </ThemedText>
               {item.unreadCount > 0 && (
                 <View style={[styles.badge, { backgroundColor: tintColor }]}>
@@ -91,8 +95,8 @@ export default function ChatScreen() {
     );
   };
 
-  const calendarChats = mockChats.filter(chat => chat.type === 'calendar_group');
-  const directChats = mockChats.filter(chat => chat.type === 'direct');
+  const calendarChats = chats.filter(chat => chat.type === 'calendar_group');
+  const directChats = chats.filter(chat => chat.type === 'direct');
 
   const handleNewChat = () => {
     router.push({
@@ -101,13 +105,22 @@ export default function ChatScreen() {
     });
   };
 
-  const renderSectionHeader = (title: string) => (
-    <ThemedText style={[styles.sectionHeader, { color: textSecondary }]}>
-      {title}
-    </ThemedText>
+  const renderSectionHeader = (title: string, badge?: number) => (
+    <View style={styles.sectionHeaderRow}>
+      <ThemedText style={[styles.sectionHeader, { color: textSecondary }]}>
+        {title}
+      </ThemedText>
+      {badge !== undefined && badge > 0 && (
+        <View style={[styles.sectionBadge, { backgroundColor: dangerColor }]}>
+          <ThemedText style={styles.badgeText}>{badge}</ThemedText>
+        </View>
+      )}
+    </View>
   );
 
-  const allChats = [
+  const allItems = [
+    ...(requestCount > 0 ? [{ type: 'header', title: 'MESSAGE REQUESTS', badge: requestCount }] : []),
+    ...messageRequests,
     ...(calendarChats.length > 0 ? [{ type: 'header', title: 'CALENDAR CHATS' }] : []),
     ...calendarChats,
     ...(directChats.length > 0 ? [{ type: 'header', title: 'DIRECT MESSAGES' }] : []),
@@ -126,15 +139,18 @@ export default function ChatScreen() {
         </Pressable>
       </View>
       <FlatList
-        data={allChats}
+        data={allItems}
         renderItem={({ item }) => {
           if ('type' in item && item.type === 'header') {
-            return renderSectionHeader(item.title);
+            return renderSectionHeader(item.title, (item as any).badge);
           }
-          return renderChat({ item: item as Chat });
+          return renderChat({ item });
         }}
-        keyExtractor={(item, index) => 'type' in item && item.type === 'header' ? `header-${index}` : (item as Chat).id}
+        keyExtractor={(item, index) => 'type' in item && item.type === 'header' ? `header-${index}` : (item as any).id}
         contentContainerStyle={styles.list}
+        refreshControl={
+          <RefreshControl refreshing={isLoading} onRefresh={refreshChats} tintColor={tintColor} />
+        }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <IconSymbol name="bubble.left.fill" size={48} color={textSecondary} />
@@ -173,12 +189,25 @@ const styles = StyleSheet.create({
   list: {
     padding: 20,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    marginTop: 8,
+  },
   sectionHeader: {
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.5,
-    marginBottom: 12,
-    marginTop: 8,
+  },
+  sectionBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+    marginLeft: 8,
   },
   chatItem: {
     flexDirection: 'row',

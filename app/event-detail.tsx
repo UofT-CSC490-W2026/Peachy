@@ -97,7 +97,7 @@ export default function EventDetailScreen() {
           <View style={[styles.aiBadge, { backgroundColor: tintColor + '10', borderColor: borderColor }]}>
             <IconSymbol name="sparkles" size={14} color={textSecondary} />
             <ThemedText style={[styles.aiText, { color: textSecondary }]}>
-              Created from: "{event.aiInput}"
+              Created from: &quot;{event.aiInput}&quot;
             </ThemedText>
           </View>
         )}

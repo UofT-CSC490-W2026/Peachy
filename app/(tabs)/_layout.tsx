@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   Keyboard,
+  Platform,
 } from 'react-native';
 import Constants from 'expo-constants';
 import { Audio } from 'expo-av';
@@ -36,6 +37,7 @@ export default function TabLayout() {
   const { user, getIdToken } = useAuth();
   const { calendars, createEvent } = useCalendar();
 
+  const [tabBarHeight, setTabBarHeight] = useState(0);
   const [sheetVisible, setSheetVisible] = useState(false);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -44,73 +46,78 @@ export default function TabLayout() {
   const recordingRef = useRef<Audio.Recording | null>(null);
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const heightAnim = useRef(new Animated.Value(0)).current;
+  const keyboardAnim = useRef(new Animated.Value(0)).current;
   const inputRef = useRef<TextInput>(null);
 
   const renderTabBar = useCallback((props: BottomTabBarProps) => (
     <View>
       {sheetVisible && (
-        <Animated.View style={{ height: heightAnim, overflow: 'hidden' }}>
-          <View
-            onLayout={(e) => {
-              const h = e.nativeEvent.layout.height;
-              if (h > 0) setSheetHeight(h);
-            }}
-            style={[
-              styles.sheetInline,
-              {
-                backgroundColor: theme.surface,
-                borderTopColor: theme.border,
-              },
-            ]}
-          >
-            <View style={[styles.inputRow, { borderColor: isRecording ? theme.danger : theme.border }]}>
-              {isTranscribing ? (
-                <ActivityIndicator size="small" color={theme.tint} style={styles.micButton} />
-              ) : (
-                <Pressable onPress={handleMicPress} style={styles.micButton} disabled={isLoading}>
-                  <IconSymbol
-                    name={isRecording ? 'stop.fill' : 'mic.fill'}
-                    size={20}
-                    color={isRecording ? theme.danger : theme.icon}
-                  />
-                </Pressable>
-              )}
-              {isRecording ? (
-                <ThemedText style={[styles.recordingText, { color: theme.danger }]}>
-                  Recording... tap stop when done
-                </ThemedText>
-              ) : (
-                <TextInput
-                  ref={inputRef}
-                  style={[styles.input, { color: theme.text }]}
-                  placeholder={isTranscribing ? 'Transcribing...' : 'Schedule with AI...'}
-                  placeholderTextColor={theme.icon}
-                  value={inputText}
-                  onChangeText={setInputText}
-                  multiline
-                  editable={!isLoading && !isTranscribing}
-                />
-              )}
-              {isLoading ? (
-                <ActivityIndicator size="small" color={theme.tint} style={styles.sendArea} />
-              ) : (
-                !isRecording && inputText.trim().length > 0 && (
-                  <Pressable
-                    onPress={() => handleSend()}
-                    style={[styles.sendBtn, { backgroundColor: theme.tint }]}
-                    disabled={isTranscribing}
-                  >
-                    <IconSymbol name="arrow.up.circle.fill" size={28} color="#FFFFFF" />
+        <Animated.View style={{ bottom: keyboardAnim, position: 'relative' }}>
+          <Animated.View style={{ height: heightAnim, overflow: 'hidden' }}>
+            <View
+              onLayout={(e) => {
+                const h = e.nativeEvent.layout.height;
+                if (h > 0) setSheetHeight(h);
+              }}
+              style={[
+                styles.sheetInline,
+                {
+                  backgroundColor: theme.surface,
+                  borderTopColor: theme.border,
+                },
+              ]}
+            >
+              <View style={[styles.inputRow, { borderColor: isRecording ? theme.danger : theme.border }]}>
+                {isTranscribing ? (
+                  <ActivityIndicator size="small" color={theme.tint} style={styles.micButton} />
+                ) : (
+                  <Pressable onPress={handleMicPress} style={styles.micButton} disabled={isLoading}>
+                    <IconSymbol
+                      name={isRecording ? 'stop.fill' : 'mic.fill'}
+                      size={20}
+                      color={isRecording ? theme.danger : theme.icon}
+                    />
                   </Pressable>
-                )
-              )}
+                )}
+                {isRecording ? (
+                  <ThemedText style={[styles.recordingText, { color: theme.danger }]}>
+                    Recording... tap stop when done
+                  </ThemedText>
+                ) : (
+                  <TextInput
+                    ref={inputRef}
+                    style={[styles.input, { color: theme.text }]}
+                    placeholder={isTranscribing ? 'Transcribing...' : 'Schedule with AI...'}
+                    placeholderTextColor={theme.icon}
+                    value={inputText}
+                    onChangeText={setInputText}
+                    multiline
+                    editable={!isLoading && !isTranscribing}
+                  />
+                )}
+                {isLoading ? (
+                  <ActivityIndicator size="small" color={theme.tint} style={styles.sendArea} />
+                ) : (
+                  !isRecording && inputText.trim().length > 0 && (
+                    <Pressable
+                      onPress={() => handleSend()}
+                      style={[styles.sendBtn, { backgroundColor: theme.tint }]}
+                      disabled={isTranscribing}
+                    >
+                      <IconSymbol name="arrow.up.circle.fill" size={28} color="#FFFFFF" />
+                    </Pressable>
+                  )
+                )}
+              </View>
             </View>
-          </View>
+          </Animated.View>
         </Animated.View>
       )}
-      <BottomTabBar {...props} />
+      <View onLayout={(e) => setTabBarHeight(e.nativeEvent.layout.height)}>
+        <BottomTabBar {...props} />
+      </View>
     </View>
-  ), [sheetVisible, heightAnim, theme, isRecording, isTranscribing, isLoading, inputText, handleMicPress, handleSend]);
+  ), [sheetVisible, heightAnim, keyboardAnim, theme, isRecording, isTranscribing, isLoading, inputText, handleMicPress, handleSend]);
 
   const openSheet = useCallback(() => {
     setSheetVisible(true);
@@ -290,6 +297,30 @@ export default function TabLayout() {
       startRecording();
     }
   }, [isRecording, isTranscribing, isLoading, startRecording, stopRecording]);
+
+  // Track keyboard height so the sheet stays above the keyboard
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const onShow = Keyboard.addListener(showEvent, (e) => {
+      Animated.timing(keyboardAnim, {
+        toValue: Math.max(0, e.endCoordinates.height - tabBarHeight),
+        duration: Platform.OS === 'ios' ? e.duration : 200,
+        useNativeDriver: false,
+      }).start();
+    });
+    const onHide = Keyboard.addListener(hideEvent, (e) => {
+      Animated.timing(keyboardAnim, {
+        toValue: 0,
+        duration: Platform.OS === 'ios' ? (e?.duration ?? 200) : 200,
+        useNativeDriver: false,
+      }).start();
+    });
+    return () => {
+      onShow.remove();
+      onHide.remove();
+    };
+  }, [keyboardAnim, tabBarHeight]);
 
   // Cleanup recording on unmount
   useEffect(() => {
