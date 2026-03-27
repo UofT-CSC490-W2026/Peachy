@@ -17,6 +17,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      checks: write
 
     steps:
       - name: Checkout
@@ -50,7 +51,9 @@ jobs:
         if: github.event_name == 'pull_request'
         with:
           coverage-file: coverage/coverage-summary.json
+          base-coverage-file: coverage/coverage-summary.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          skip-step: all
 
       - name: Extract coverage metrics
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
