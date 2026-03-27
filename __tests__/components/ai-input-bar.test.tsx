@@ -154,19 +154,71 @@ describe('AiInputBar', () => {
     expect(alertSpy).toHaveBeenCalledWith('Permission Required', expect.any(String));
   });
 
+  it('shows error alert when recording fails to start', async () => {
+    const { Audio } = require('expo-av');
+    Audio.Recording.createAsync.mockRejectedValueOnce(new Error('Hardware unavailable'));
+    const alertSpy = jest.spyOn(Alert, 'alert');
+
+    renderWithProviders(<AiInputBar />);
+    await act(async () => { fireEvent.press(screen.getAllByTestId('symbol-view')[0]); });
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Error', 'Could not start recording. Please try again.');
+    });
+  });
+
+  it('shows no speech detected alert when transcript is empty', async () => {
+    const { transcribeAudio } = require('@/utils/audio-transcribe');
+    transcribeAudio.mockResolvedValueOnce('');
+    const alertSpy = jest.spyOn(Alert, 'alert');
+
+    renderWithProviders(<AiInputBar />);
+    await act(async () => { fireEvent.press(screen.getAllByTestId('symbol-view')[0]); });
+    await act(async () => { fireEvent.press(screen.getAllByTestId('symbol-view')[0]); });
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('No Speech Detected', expect.any(String));
+    });
+  });
+
   it('stops recording and transcribes when mic pressed again', async () => {
     const { transcribeAudio } = require('@/utils/audio-transcribe');
     renderWithProviders(<AiInputBar />);
 
-    // Start recording
-    const icons = screen.getAllByTestId('symbol-view');
-    await act(async () => { fireEvent.press(icons[0]); });
-
-    // Stop recording — press mic again (now shows stop icon)
+    await act(async () => { fireEvent.press(screen.getAllByTestId('symbol-view')[0]); });
     await act(async () => { fireEvent.press(screen.getAllByTestId('symbol-view')[0]); });
 
     await waitFor(() => {
       expect(transcribeAudio).toHaveBeenCalled();
+    });
+  });
+
+  it('shows session expired alert when stopRecording gets AuthError', async () => {
+    const { transcribeAudio } = require('@/utils/audio-transcribe');
+    const { AuthError } = require('@/utils/api-client');
+    transcribeAudio.mockRejectedValueOnce(new AuthError('Unauthorized'));
+    const alertSpy = jest.spyOn(Alert, 'alert');
+
+    renderWithProviders(<AiInputBar />);
+    await act(async () => { fireEvent.press(screen.getAllByTestId('symbol-view')[0]); });
+    await act(async () => { fireEvent.press(screen.getAllByTestId('symbol-view')[0]); });
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Session Expired', expect.any(String));
+    });
+  });
+
+  it('shows transcription failed alert on generic error', async () => {
+    const { transcribeAudio } = require('@/utils/audio-transcribe');
+    transcribeAudio.mockRejectedValueOnce(new Error('Network failure'));
+    const alertSpy = jest.spyOn(Alert, 'alert');
+
+    renderWithProviders(<AiInputBar />);
+    await act(async () => { fireEvent.press(screen.getAllByTestId('symbol-view')[0]); });
+    await act(async () => { fireEvent.press(screen.getAllByTestId('symbol-view')[0]); });
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Transcription Failed', expect.any(String));
     });
   });
 

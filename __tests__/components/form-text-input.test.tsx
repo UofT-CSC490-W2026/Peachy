@@ -42,4 +42,9 @@ describe('FormTextInput', () => {
     fireEvent.changeText(screen.getByPlaceholderText('input'), 'hello');
     expect(onChange).toHaveBeenCalledWith('hello');
   });
+
+  it('renders with multiline prop', () => {
+    renderWithProviders(<FormTextInput placeholder="Notes" multiline />);
+    expect(screen.getByPlaceholderText('Notes')).toBeTruthy();
+  });
 });

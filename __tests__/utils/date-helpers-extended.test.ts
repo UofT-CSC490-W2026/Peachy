@@ -185,6 +185,27 @@ describe('getEventsForToday', () => {
   it('returns empty for no events', () => {
     expect(getEventsForToday([])).toHaveLength(0);
   });
+
+  it('includes events that end today (started yesterday)', () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(22, 0, 0, 0);
+    const endToday = new Date();
+    endToday.setHours(6, 0, 0, 0);
+    const event = makeEvent(yesterday.toISOString(), endToday.toISOString());
+    expect(getEventsForToday([event])).toHaveLength(1);
+  });
+
+  it('includes events that span all of today', () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(12, 0, 0, 0);
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(12, 0, 0, 0);
+    const event = makeEvent(yesterday.toISOString(), tomorrow.toISOString());
+    expect(getEventsForToday([event])).toHaveLength(1);
+  });
 });
 
 // ── getEventsForTomorrow ─────────────────────────────────────────────────────
@@ -211,6 +232,26 @@ describe('getEventsForTomorrow', () => {
 
   it('returns empty for no events', () => {
     expect(getEventsForTomorrow([])).toHaveLength(0);
+  });
+
+  it('includes events that end tomorrow (started today)', () => {
+    const today = new Date();
+    today.setHours(20, 0, 0, 0);
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(6, 0, 0, 0);
+    const event = makeEvent(today.toISOString(), tomorrow.toISOString());
+    expect(getEventsForTomorrow([event])).toHaveLength(1);
+  });
+
+  it('includes events that span all of tomorrow', () => {
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    const dayAfter = new Date();
+    dayAfter.setDate(dayAfter.getDate() + 2);
+    dayAfter.setHours(12, 0, 0, 0);
+    const event = makeEvent(today.toISOString(), dayAfter.toISOString());
+    expect(getEventsForTomorrow([event])).toHaveLength(1);
   });
 
   it('sorts multiple tomorrow events by start time', () => {
