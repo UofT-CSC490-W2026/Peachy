@@ -44,4 +44,29 @@ describe('useInterests', () => {
     expect(result.current.selected.has('running')).toBe(true);
     expect(result.current.selected.has('yoga')).toBe(true);
   });
+
+  it('loads interests from AsyncStorage when no initialInterests', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    AsyncStorage.getItem.mockResolvedValueOnce(JSON.stringify(['hiking', 'coding']));
+    const { result } = renderHook(() => useInterests());
+    await act(async () => {});
+    expect(result.current.selected.has('hiking')).toBe(true);
+    expect(result.current.selected.has('coding')).toBe(true);
+  });
+
+  it('ignores invalid AsyncStorage data', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    AsyncStorage.getItem.mockResolvedValueOnce('not-valid-json{{{');
+    const { result } = renderHook(() => useInterests());
+    await act(async () => {});
+    expect(result.current.selected.size).toBe(0);
+  });
+
+  it('ignores AsyncStorage array containing non-strings', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    AsyncStorage.getItem.mockResolvedValueOnce(JSON.stringify([1, 2, 3]));
+    const { result } = renderHook(() => useInterests());
+    await act(async () => {});
+    expect(result.current.selected.size).toBe(0);
+  });
 });

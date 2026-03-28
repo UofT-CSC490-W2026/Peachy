@@ -34,6 +34,23 @@ describe('ThemedText', () => {
     renderWithProviders(<ThemedText testID="my-text">Test</ThemedText>);
     expect(screen.getByTestId('my-text')).toBeTruthy();
   });
+
+  it('renders with inline fontSize style', () => {
+    renderWithProviders(<ThemedText style={{ fontSize: 20 }}>Sized</ThemedText>);
+    expect(screen.getByText('Sized')).toBeTruthy();
+  });
+
+  it('renders with inline lineHeight style', () => {
+    renderWithProviders(<ThemedText style={{ lineHeight: 28 }}>Lined</ThemedText>);
+    expect(screen.getByText('Lined')).toBeTruthy();
+  });
+
+  it('renders with explicit light and dark colors', () => {
+    renderWithProviders(
+      <ThemedText lightColor="#000000" darkColor="#ffffff">Colored</ThemedText>
+    );
+    expect(screen.getByText('Colored')).toBeTruthy();
+  });
 });
 
 describe('ThemedText theme color compliance', () => {

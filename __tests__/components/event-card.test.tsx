@@ -56,4 +56,12 @@ describe('EventCard', () => {
     renderWithProviders(<EventCard event={allDay} calendarColor="#FF8C6B" />);
     expect(screen.getByText('All Day')).toBeTruthy();
   });
+
+  it('navigates to event-detail when no onPress provided', () => {
+    const push = jest.fn();
+    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ push });
+    renderWithProviders(<EventCard event={mockEvent} calendarColor="#FF8C6B" />);
+    fireEvent.press(screen.getByText('Team Standup'));
+    expect(push).toHaveBeenCalledWith({ pathname: '/event-detail', params: { id: 'evt-1' } });
+  });
 });

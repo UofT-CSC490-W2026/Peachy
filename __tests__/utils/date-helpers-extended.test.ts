@@ -185,6 +185,27 @@ describe('getEventsForToday', () => {
   it('returns empty for no events', () => {
     expect(getEventsForToday([])).toHaveLength(0);
   });
+
+  it('includes events that end today (started yesterday)', () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(22, 0, 0, 0);
+    const endToday = new Date();
+    endToday.setHours(6, 0, 0, 0);
+    const event = makeEvent(yesterday.toISOString(), endToday.toISOString());
+    expect(getEventsForToday([event])).toHaveLength(1);
+  });
+
+  it('includes events that span all of today', () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(12, 0, 0, 0);
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(12, 0, 0, 0);
+    const event = makeEvent(yesterday.toISOString(), tomorrow.toISOString());
+    expect(getEventsForToday([event])).toHaveLength(1);
+  });
 });
 
 // ── getEventsForTomorrow ─────────────────────────────────────────────────────
@@ -211,6 +232,40 @@ describe('getEventsForTomorrow', () => {
 
   it('returns empty for no events', () => {
     expect(getEventsForTomorrow([])).toHaveLength(0);
+  });
+
+  it('includes events that end tomorrow (started today)', () => {
+    const today = new Date();
+    today.setHours(20, 0, 0, 0);
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(6, 0, 0, 0);
+    const event = makeEvent(today.toISOString(), tomorrow.toISOString());
+    expect(getEventsForTomorrow([event])).toHaveLength(1);
+  });
+
+  it('includes events that span all of tomorrow', () => {
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    const dayAfter = new Date();
+    dayAfter.setDate(dayAfter.getDate() + 2);
+    dayAfter.setHours(12, 0, 0, 0);
+    const event = makeEvent(today.toISOString(), dayAfter.toISOString());
+    expect(getEventsForTomorrow([event])).toHaveLength(1);
+  });
+
+  it('sorts multiple tomorrow events by start time', () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const late = new Date(tomorrow); late.setHours(15, 0, 0, 0);
+    const early = new Date(tomorrow); early.setHours(8, 0, 0, 0);
+    const lateEnd = new Date(late); lateEnd.setHours(16);
+    const earlyEnd = new Date(early); earlyEnd.setHours(9);
+    const e1 = makeEvent(late.toISOString(), lateEnd.toISOString(), 'late');
+    const e2 = makeEvent(early.toISOString(), earlyEnd.toISOString(), 'early');
+    const result = getEventsForTomorrow([e1, e2]);
+    expect(result[0].id).toBe('early');
+    expect(result[1].id).toBe('late');
   });
 });
 
@@ -248,6 +303,19 @@ describe('getEventsThisWeek', () => {
 
   it('returns empty for no events', () => {
     expect(getEventsThisWeek([])).toHaveLength(0);
+  });
+
+  it('sorts multiple this-week events by start time', () => {
+    const base = new Date();
+    const late = new Date(base); late.setDate(late.getDate() + 5); late.setHours(15, 0, 0, 0);
+    const early = new Date(base); early.setDate(early.getDate() + 3); early.setHours(8, 0, 0, 0);
+    const lateEnd = new Date(late); lateEnd.setHours(16);
+    const earlyEnd = new Date(early); earlyEnd.setHours(9);
+    const e1 = makeEvent(late.toISOString(), lateEnd.toISOString(), 'late');
+    const e2 = makeEvent(early.toISOString(), earlyEnd.toISOString(), 'early');
+    const result = getEventsThisWeek([e1, e2]);
+    expect(result[0].id).toBe('early');
+    expect(result[1].id).toBe('late');
   });
 });
 
