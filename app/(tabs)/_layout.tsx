@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Keyboard,
   Platform,
+  Dimensions,
 } from 'react-native';
 import Constants from 'expo-constants';
 import { Audio } from 'expo-av';
@@ -38,6 +39,7 @@ export default function TabLayout() {
   const { calendars, createEvent } = useCalendar();
 
   const [tabBarHeight, setTabBarHeight] = useState(0);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [sheetVisible, setSheetVisible] = useState(false);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -113,11 +115,13 @@ export default function TabLayout() {
           </Animated.View>
         </Animated.View>
       )}
-      <View onLayout={(e) => setTabBarHeight(e.nativeEvent.layout.height)}>
-        <BottomTabBar {...props} />
-      </View>
+      {!(Platform.OS === 'android' && isKeyboardVisible) && (
+        <View onLayout={(e) => setTabBarHeight(e.nativeEvent.layout.height)}>
+          <BottomTabBar {...props} />
+        </View>
+      )}
     </View>
-  ), [sheetVisible, heightAnim, keyboardAnim, theme, isRecording, isTranscribing, isLoading, inputText, handleMicPress, handleSend]);
+  ), [sheetVisible, heightAnim, keyboardAnim, theme, isRecording, isTranscribing, isLoading, inputText, isKeyboardVisible, handleMicPress, handleSend]);
 
   const openSheet = useCallback(() => {
     setSheetVisible(true);
@@ -303,13 +307,23 @@ export default function TabLayout() {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
     const onShow = Keyboard.addListener(showEvent, (e) => {
+      setIsKeyboardVisible(true);
+      const windowHeight = Dimensions.get('window').height;
+      const keyboardHeight = Math.max(0, e.endCoordinates?.height ?? 0);
+      const keyboardFrameHeight = Platform.OS === 'android' && typeof e.endCoordinates?.screenY === 'number'
+        ? Math.max(0, windowHeight - e.endCoordinates.screenY)
+        : keyboardHeight;
+      const keyboardOffset = Platform.OS === 'ios'
+        ? Math.max(0, keyboardHeight - tabBarHeight)
+        : keyboardFrameHeight;
       Animated.timing(keyboardAnim, {
-        toValue: Math.max(0, e.endCoordinates.height - tabBarHeight),
+        toValue: keyboardOffset,
         duration: Platform.OS === 'ios' ? e.duration : 200,
         useNativeDriver: false,
       }).start();
     });
     const onHide = Keyboard.addListener(hideEvent, (e) => {
+      setIsKeyboardVisible(false);
       Animated.timing(keyboardAnim, {
         toValue: 0,
         duration: Platform.OS === 'ios' ? (e?.duration ?? 200) : 200,

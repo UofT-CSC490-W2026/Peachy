@@ -1,4 +1,4 @@
-import { StyleSheet, View, FlatList, TextInput, Pressable, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { StyleSheet, View, FlatList, TextInput, Pressable, KeyboardAvoidingView, Platform, Alert, Keyboard, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -32,6 +32,8 @@ export default function ChatDetailScreen() {
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
+  const [androidKeyboardOffset, setAndroidKeyboardOffset] = useState(0);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   // Check if this is a message request
   const isMessageRequest = messageRequests.some(r => r.id === chatId);
@@ -58,6 +60,32 @@ export default function ChatDetailScreen() {
     const interval = setInterval(loadMessages, 8000);
     return () => clearInterval(interval);
   }, [chatId, loadMessages]);
+
+  // Use measured Android keyboard frame to avoid OEM-specific gaps.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+
+    const onShow = Keyboard.addListener('keyboardDidShow', (e) => {
+      const windowHeight = Dimensions.get('window').height;
+      const keyboardHeight = Math.max(0, e.endCoordinates?.height ?? 0);
+      const keyboardFrameHeight = typeof e.endCoordinates?.screenY === 'number'
+        ? Math.max(0, windowHeight - e.endCoordinates.screenY)
+        : keyboardHeight;
+
+      setIsKeyboardVisible(true);
+      setAndroidKeyboardOffset(keyboardFrameHeight);
+    });
+
+    const onHide = Keyboard.addListener('keyboardDidHide', () => {
+      setIsKeyboardVisible(false);
+      setAndroidKeyboardOffset(0);
+    });
+
+    return () => {
+      onShow.remove();
+      onHide.remove();
+    };
+  }, []);
 
   const handleSend = async () => {
     if (!inputText.trim() || !chatId) return;
@@ -201,10 +229,15 @@ export default function ChatDetailScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.keyboardAvoid}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <ThemedView style={styles.container}>
+      <ThemedView
+        style={[
+          styles.container,
+          Platform.OS === 'android' ? { paddingBottom: androidKeyboardOffset } : null,
+        ]}
+      >
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: borderColor }]}>
           <Pressable onPress={() => router.back()} style={styles.backButton}>
@@ -257,7 +290,18 @@ export default function ChatDetailScreen() {
         />
 
         {/* Input Bar */}
-        <View style={[styles.inputContainer, { backgroundColor: surfaceColor, borderTopColor: borderColor, paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <View
+          style={[
+            styles.inputContainer,
+            {
+              backgroundColor: surfaceColor,
+              borderTopColor: borderColor,
+              paddingBottom: Platform.OS === 'android' && isKeyboardVisible
+                ? 8
+                : Math.max(insets.bottom, 12),
+            },
+          ]}
+        >
           <TextInput
             style={[styles.input, { color: textColor }]}
             placeholder="Type a message..."
