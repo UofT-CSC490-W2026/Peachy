@@ -2,11 +2,16 @@ import React from 'react';
 import { render, RenderOptions } from '@testing-library/react-native';
 import { ThemeProvider } from '@/contexts/theme-context';
 
+function mockSystemTheme(theme: 'light' | 'dark') {
+  jest.spyOn(require('react-native'), 'useColorScheme').mockReturnValue(theme);
+}
+
 function AllProviders({ children }: { children: React.ReactNode }) {
   return <ThemeProvider>{children}</ThemeProvider>;
 }
 
 function renderWithProviders(ui: React.ReactElement, options?: RenderOptions) {
+  mockSystemTheme('light');
   return render(ui, { wrapper: AllProviders, ...options });
 }
 
@@ -15,7 +20,7 @@ function renderWithTheme(
   theme: 'light' | 'dark',
   options?: RenderOptions
 ) {
-  jest.spyOn(require('react-native'), 'useColorScheme').mockReturnValue(theme);
+  mockSystemTheme(theme);
   return render(ui, { wrapper: AllProviders, ...options });
 }
 

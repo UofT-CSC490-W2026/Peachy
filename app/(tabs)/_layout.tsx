@@ -115,13 +115,16 @@ export default function TabLayout() {
           </Animated.View>
         </Animated.View>
       )}
-      {!(Platform.OS === 'android' && isKeyboardVisible) && (
-        <View onLayout={(e) => setTabBarHeight(e.nativeEvent.layout.height)}>
-          <BottomTabBar {...props} />
-        </View>
-      )}
+      <View
+        onLayout={(e) => setTabBarHeight(e.nativeEvent.layout.height)}
+        style={Platform.OS === 'android' && isKeyboardVisible && tabBarHeight > 0
+          ? { height: tabBarHeight }
+          : undefined}
+      >
+        {!(Platform.OS === 'android' && isKeyboardVisible) && <BottomTabBar {...props} />}
+      </View>
     </View>
-  ), [sheetVisible, heightAnim, keyboardAnim, theme, isRecording, isTranscribing, isLoading, inputText, isKeyboardVisible, handleMicPress, handleSend]);
+  ), [sheetVisible, heightAnim, keyboardAnim, theme, isRecording, isTranscribing, isLoading, inputText, isKeyboardVisible, tabBarHeight, handleMicPress, handleSend]);
 
   const openSheet = useCallback(() => {
     setSheetVisible(true);
@@ -315,7 +318,7 @@ export default function TabLayout() {
         : keyboardHeight;
       const keyboardOffset = Platform.OS === 'ios'
         ? Math.max(0, keyboardHeight - tabBarHeight)
-        : keyboardFrameHeight;
+        : Math.max(0, keyboardFrameHeight - tabBarHeight);
       Animated.timing(keyboardAnim, {
         toValue: keyboardOffset,
         duration: Platform.OS === 'ios' ? e.duration : 200,

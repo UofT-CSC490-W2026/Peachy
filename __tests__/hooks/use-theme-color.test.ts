@@ -10,6 +10,7 @@ const wrapper = ({ children }: { children: React.ReactNode }) =>
 describe('useThemeColor', () => {
   beforeEach(() => {
     jest.restoreAllMocks();
+    jest.spyOn(require('react-native'), 'useColorScheme').mockReturnValue('light');
   });
 
   afterEach(() => {
