@@ -1,21 +1,28 @@
 import { CalendarEvent } from '@/types';
 
 /**
- * Get a 6x7 grid of dates for a month calendar view
- * Always returns 42 dates starting from the first Sunday before/on the 1st
+ * Get a full-week date grid for a month calendar view.
+ * Returns 4-6 weeks (28/35/42 dates), starting on Sunday and ending on Saturday.
  */
 export function getMonthGrid(year: number, month: number): Date[] {
   const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
   const startDate = new Date(firstDay);
+  const endDate = new Date(lastDay);
 
   // Go back to the previous Sunday (or stay if already Sunday)
   const dayOfWeek = firstDay.getDay();
   startDate.setDate(firstDay.getDate() - dayOfWeek);
 
+  // Go forward to the next Saturday (or stay if already Saturday)
+  const lastDayOfWeek = lastDay.getDay();
+  endDate.setDate(lastDay.getDate() + (6 - lastDayOfWeek));
+
   const grid: Date[] = [];
-  for (let i = 0; i < 42; i++) {
-    grid.push(new Date(startDate));
-    startDate.setDate(startDate.getDate() + 1);
+  const current = new Date(startDate);
+  while (current <= endDate) {
+    grid.push(new Date(current));
+    current.setDate(current.getDate() + 1);
   }
 
   return grid;

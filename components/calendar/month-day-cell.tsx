@@ -1,4 +1,4 @@
-import { StyleSheet, View, Pressable, Dimensions } from 'react-native';
+import { StyleSheet, View, Pressable } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Calendar, CalendarEvent } from '@/types';
@@ -76,13 +76,10 @@ export function MonthDayCell({
   );
 }
 
-const { width: screenWidth } = Dimensions.get('window');
-const cellWidth = (screenWidth - 16) / 7; // 16 for horizontal padding
-
 const styles = StyleSheet.create({
   cell: {
-    width: cellWidth,
-    height: cellWidth,
+    width: '14.2857%',
+    aspectRatio: 1,
     borderWidth: 0.5,
     padding: 4,
     alignItems: 'center',

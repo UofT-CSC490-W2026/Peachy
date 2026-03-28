@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   dayNameCell: {
-    flex: 1,
+    width: '14.2857%',
     alignItems: 'center',
     paddingVertical: 8,
   },
@@ -81,6 +81,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   grid: {
+    width: '100%',
     flexDirection: 'row',
     flexWrap: 'wrap',
   },

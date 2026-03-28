@@ -32,10 +32,14 @@ function makeEvent(id: string, startIso: string, endIso: string, isAllDay = fals
 }
 
 describe('getMonthGrid', () => {
-  it('always returns exactly 42 dates', () => {
-    expect(getMonthGrid(2025, 0).length).toBe(42);
-    expect(getMonthGrid(2024, 1).length).toBe(42);
-    expect(getMonthGrid(2025, 11).length).toBe(42);
+  it('returns complete weeks only (4, 5, or 6 rows)', () => {
+    const jan2025 = getMonthGrid(2025, 0).length;
+    const feb2026 = getMonthGrid(2026, 1).length;
+    const mar2025 = getMonthGrid(2025, 2).length;
+
+    expect([28, 35, 42]).toContain(jan2025);
+    expect([28, 35, 42]).toContain(feb2026);
+    expect([28, 35, 42]).toContain(mar2025);
   });
 
   it('first date is a Sunday on or before the 1st of the month', () => {
@@ -46,7 +50,17 @@ describe('getMonthGrid', () => {
 
   it('last date is a Saturday', () => {
     const grid = getMonthGrid(2025, 0);
-    expect(grid[41].getDay()).toBe(6);
+    expect(grid[grid.length - 1].getDay()).toBe(6);
+  });
+
+  it('returns fewer rows when a month fits naturally in fewer weeks', () => {
+    // February 2026 starts on Sunday and has 28 days, so exactly 4 weeks.
+    expect(getMonthGrid(2026, 1).length).toBe(28);
+  });
+
+  it('returns 6 rows for months that span six calendar weeks', () => {
+    // March 2025 starts on Saturday and requires 6 calendar rows.
+    expect(getMonthGrid(2025, 2).length).toBe(42);
   });
 
   it('grid covers the entire target month', () => {
