@@ -1,7 +1,8 @@
 import React from 'react';
 import { screen } from '@testing-library/react-native';
-import { renderWithProviders } from '../test-utils';
+import { renderWithProviders, renderWithTheme } from '../test-utils';
 import { ThemedText } from '@/components/themed-text';
+import { Colors } from '@/constants/theme';
 
 describe('ThemedText', () => {
   it('renders text content', () => {
@@ -32,5 +33,45 @@ describe('ThemedText', () => {
   it('passes through custom testID', () => {
     renderWithProviders(<ThemedText testID="my-text">Test</ThemedText>);
     expect(screen.getByTestId('my-text')).toBeTruthy();
+  });
+});
+
+describe('ThemedText theme color compliance', () => {
+  beforeEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('applies light text color by default', () => {
+    renderWithProviders(<ThemedText testID="t">X</ThemedText>);
+    expect(screen.getByTestId('t')).toHaveStyle({ color: Colors.light.text });
+  });
+
+  it('applies dark text color in dark mode', () => {
+    renderWithTheme(<ThemedText testID="t">X</ThemedText>, 'dark');
+    expect(screen.getByTestId('t')).toHaveStyle({ color: Colors.dark.text });
+  });
+
+  it('applies tint color for link type in light mode', () => {
+    renderWithProviders(<ThemedText testID="t" type="link">Link</ThemedText>);
+    expect(screen.getByTestId('t')).toHaveStyle({ color: Colors.light.tint });
+  });
+
+  it('applies tint color for link type in dark mode', () => {
+    renderWithTheme(<ThemedText testID="t" type="link">Link</ThemedText>, 'dark');
+    expect(screen.getByTestId('t')).toHaveStyle({ color: Colors.dark.tint });
+  });
+
+  it('uses lightColor prop override in light mode', () => {
+    renderWithProviders(<ThemedText testID="t" lightColor="#AABBCC">X</ThemedText>);
+    expect(screen.getByTestId('t')).toHaveStyle({ color: '#AABBCC' });
+  });
+
+  it('uses darkColor prop override in dark mode', () => {
+    renderWithTheme(<ThemedText testID="t" darkColor="#112233">X</ThemedText>, 'dark');
+    expect(screen.getByTestId('t')).toHaveStyle({ color: '#112233' });
   });
 });
