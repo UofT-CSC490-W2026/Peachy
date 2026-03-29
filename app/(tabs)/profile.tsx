@@ -1,5 +1,4 @@
 import { StyleSheet, View, ScrollView, Pressable, Image } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
@@ -18,7 +17,6 @@ export default function ProfileScreen() {
   const borderColor = useThemeColor({}, 'border');
   const surfaceColor = useThemeColor({}, 'surface');
   const tintColor = useThemeColor({}, 'tint');
-  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { friends } = useFriends();
   const { selected } = useInterests(user?.interests);
@@ -43,10 +41,21 @@ export default function ProfileScreen() {
   return (
     <ThemedView style={styles.container}>
       {/* Top bar */}
-      <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
+      <View
+        style={[
+          styles.topBar,
+          {
+            borderBottomColor: borderColor,
+            backgroundColor: surfaceColor,
+          },
+        ]}
+      >
         <View style={styles.topBarSpacer} />
         <ThemedText style={styles.usernameTop} numberOfLines={1}>@{user?.username}</ThemedText>
-        <Pressable style={styles.menuButton} onPress={() => router.push('/settings')}>
+        <Pressable
+          style={[styles.menuButton, { borderColor, backgroundColor: surfaceColor }]}
+          onPress={() => router.push('/settings')}
+        >
           <IconSymbol name="line.horizontal.3" size={22} color={textColor} />
         </Pressable>
       </View>
@@ -120,11 +129,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
+    paddingTop: 60,
     paddingBottom: 12,
+    minHeight: 112,
+    borderBottomWidth: 1,
   },
   topBarSpacer: { width: 40 },
-  usernameTop: { fontSize: 17, fontWeight: '700', flex: 1, textAlign: 'center' },
-  menuButton: { width: 40, alignItems: 'center', justifyContent: 'center' },
+  usernameTop: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '700',
+  },
+  menuButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
   profileHeader: {
     flexDirection: 'row',
@@ -141,7 +166,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
   },
-  avatarInitial: { fontSize: 36, fontWeight: '600' },
+  avatarInitial: { fontSize: 28, fontWeight: '600' },
   statsRow: {
     flex: 1,
     flexDirection: 'row',
@@ -150,9 +175,9 @@ const styles = StyleSheet.create({
     gap: 24,
   },
   statItem: { alignItems: 'center', gap: 2 },
-  statNumber: { fontSize: 20, fontWeight: '700' },
-  statLabel: { fontSize: 13 },
-  name: { fontSize: 16, fontWeight: '600', marginBottom: 14 },
+  statNumber: { fontSize: 16, fontWeight: '700' },
+  statLabel: { fontSize: 11 },
+  name: { fontSize: 14, fontWeight: '600', marginBottom: 14 },
   editButton: {
     borderWidth: 1,
     borderRadius: 10,
@@ -160,15 +185,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 28,
   },
-  editButtonText: { fontSize: 15, fontWeight: '600' },
+  editButtonText: { fontSize: 13, fontWeight: '600' },
   interestsSection: { gap: 16 },
   interestsHeading: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
   },
   category: { gap: 8 },
-  categoryLabel: { fontSize: 13, fontWeight: '600' },
+  categoryLabel: { fontSize: 12, fontWeight: '600' },
   tagsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tag: {
     paddingHorizontal: 14,
@@ -176,5 +201,5 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
   },
-  tagLabel: { fontSize: 13, fontWeight: '600' },
+  tagLabel: { fontSize: 11, fontWeight: '600' },
 });

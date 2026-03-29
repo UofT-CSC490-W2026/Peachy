@@ -129,13 +129,13 @@ export default function ChatScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <View style={styles.header}>
-        <ThemedText type="title">Chat</ThemedText>
+      <View style={[styles.header, { borderBottomColor: borderColor, backgroundColor: surfaceColor }]}>
+        <ThemedText type="title" style={styles.headerTitle}>Chat</ThemedText>
         <Pressable
-          style={[styles.addButton, { backgroundColor: tintColor }]}
+          style={[styles.addButton, { backgroundColor: tintColor, borderColor: tintColor }]}
           onPress={handleNewChat}
         >
-          <IconSymbol name="plus" size={20} color="#FFFFFF" />
+          <IconSymbol name="plus" size={24} color="#FFFFFF" />
         </Pressable>
       </View>
       <FlatList
@@ -177,12 +177,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 60,
-    paddingBottom: 20,
+    paddingBottom: 12,
+    minHeight: 112,
+    borderBottomWidth: 1,
+  },
+  headerTitle: {
+    flexShrink: 1,
   },
   addButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },

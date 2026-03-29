@@ -113,7 +113,7 @@ export default function CalendarsScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { borderBottomColor: borderColor, backgroundColor: surfaceColor }]}>
         <View style={styles.headerTitleRow}>
           <ThemedText type="title" style={styles.headerTitle} numberOfLines={1}>
             Calendars
@@ -126,7 +126,7 @@ export default function CalendarsScreen() {
                 styles.topFilterButton,
                 {
                   borderColor: tintColor,
-                  backgroundColor: isFilterExpanded ? `${tintColor}20` : 'transparent',
+                  backgroundColor: isFilterExpanded ? `${tintColor}20` : surfaceColor,
                 },
               ]}
               onPress={() => setIsFilterExpanded(prev => !prev)}
@@ -143,7 +143,7 @@ export default function CalendarsScreen() {
           <Pressable
             style={[
               styles.manageButton,
-              { borderColor: tintColor, backgroundColor: isManageView ? `${tintColor}20` : 'transparent' },
+              { borderColor: tintColor, backgroundColor: isManageView ? `${tintColor}20` : surfaceColor },
             ]}
             onPress={() => {
               if (!isManageView) {
@@ -157,7 +157,7 @@ export default function CalendarsScreen() {
             </ThemedText>
           </Pressable>
           <Pressable
-            style={[styles.addButton, { backgroundColor: tintColor }]}
+            style={[styles.addButton, { backgroundColor: tintColor, borderColor: tintColor }]}
             onPress={() => router.push('/calendar-create')}
           >
             <IconSymbol name="plus" size={24} color="#FFFFFF" />
@@ -239,7 +239,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 60,
-    paddingBottom: 10,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
   },
   headerTitleRow: {
     flex: 1,
@@ -257,18 +258,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   topFilterButton: {
-    width: 34,
-    height: 34,
+    width: 36,
+    height: 36,
     borderWidth: 1,
-    borderRadius: 17,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
   manageButton: {
     borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: 18,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    minHeight: 36,
+    justifyContent: 'center',
   },
   manageButtonText: {
     fontSize: 13,
@@ -278,6 +280,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },

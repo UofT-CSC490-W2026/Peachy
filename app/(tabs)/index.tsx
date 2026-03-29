@@ -13,6 +13,8 @@ export default function HomeScreen() {
   const router = useRouter();
   const { calendars, visibleEvents, pendingItems, acceptPendingItem, declinePendingItem } = useCalendar();
   const tintColor = useThemeColor({}, 'tint');
+  const borderColor = useThemeColor({}, 'border');
+  const surfaceColor = useThemeColor({}, 'surface');
 
   // All items fetched are already 'pending' status — no need to filter
   const displayedPendingItems = useMemo(() => pendingItems, [pendingItems]);
@@ -44,10 +46,10 @@ export default function HomeScreen() {
   return (
     <ThemedView style={styles.container}>
       {/* Simple header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { borderBottomColor: borderColor, backgroundColor: surfaceColor }]}>
         <ThemedText type="title">Home</ThemedText>
         <Pressable
-          style={[styles.addButton, { backgroundColor: tintColor }]}
+          style={[styles.addButton, { backgroundColor: tintColor, borderColor: tintColor }]}
           onPress={() => router.push('/event-create')}
         >
           <IconSymbol name="plus" size={24} color="#FFFFFF" />
@@ -80,12 +82,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 60,
-    paddingBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
   },
   addButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
