@@ -63,6 +63,7 @@ export default {
       apiUrl: process.env.API_URL,
       cognitoUserPoolId: process.env.COGNITO_USER_POOL_ID,
       cognitoClientId: process.env.COGNITO_CLIENT_ID,
+      cognitoDomain: process.env.COGNITO_DOMAIN,
       eas: {
         projectId: process.env.EAS_PROJECT_ID ?? '9caa08c2-8fad-4429-9707-dd2b4654af71',
       },

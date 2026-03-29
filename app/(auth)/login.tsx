@@ -14,7 +14,7 @@ import { AUTH_CONSTANTS } from '@/constants/auth';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login, isLoading } = useAuth();
+  const { login, startGoogleSignIn, isLoading } = useAuth();
   const textSecondary = useThemeColor({}, 'textSecondary');
   const borderColor = useThemeColor({}, 'border');
   const dangerColor = useThemeColor({}, 'danger');
@@ -144,7 +144,7 @@ export default function LoginScreen() {
           <AuthButton
             title="Continue with Google"
             variant="google"
-            onPress={() => setFormError('Google sign-in coming soon.')}
+            onPress={() => startGoogleSignIn()}
           />
 
           <View style={styles.footer}>

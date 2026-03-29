@@ -12,7 +12,7 @@ import { validateSignupForm } from '@/utils/validation';
 
 export default function SignupScreen() {
   const router = useRouter();
-  const { signup, isLoading, setPendingVerificationEmail } = useAuth();
+  const { signup, startGoogleSignIn, isLoading, setPendingVerificationEmail } = useAuth();
   const textSecondary = useThemeColor({}, 'textSecondary');
   const borderColor = useThemeColor({}, 'border');
   const dangerColor = useThemeColor({}, 'danger');
@@ -124,7 +124,7 @@ export default function SignupScreen() {
           <AuthButton
             title="Continue with Google"
             variant="google"
-            onPress={() => setFormError('Google sign-in coming soon.')}
+            onPress={() => startGoogleSignIn()}
           />
 
           <View style={styles.footer}>
