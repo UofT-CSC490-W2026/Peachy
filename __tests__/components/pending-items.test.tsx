@@ -102,54 +102,26 @@ describe('PendingItems', () => {
     expect(screen.getByText('Decline')).toBeTruthy();
   });
 
-  it('shows calendar picker Alert when Accept tapped on event_invite', async () => {
+  it('opens calendar picker modal when Accept tapped on event_invite', async () => {
     renderWithProviders(<PendingItems items={[eventInviteItem]} onAccept={onAccept} onDecline={onDecline} />);
     await act(async () => { fireEvent.press(screen.getByText('Accept')); });
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Add to Calendar',
-      expect.stringContaining('calendar'),
-      expect.arrayContaining([
-        expect.objectContaining({ text: 'Personal' }),
-        expect.objectContaining({ text: 'Work' }),
-        expect.objectContaining({ text: 'Cancel' }),
-      ]),
-    );
+    // Modal shows "Add to Calendar" heading and calendar options
+    expect(screen.getByText('Add to Calendar')).toBeTruthy();
+    expect(screen.getAllByText('Personal').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Work').length).toBeGreaterThan(0);
   });
 
-  it('calls onAccept with calendarId when calendar is chosen from picker', async () => {
+  it('calls onAccept with calendarId when calendar is chosen from modal', async () => {
     renderWithProviders(<PendingItems items={[eventInviteItem]} onAccept={onAccept} onDecline={onDecline} />);
     await act(async () => { fireEvent.press(screen.getByText('Accept')); });
-
-    // Simulate pressing "Personal" in the Alert
-    const alertCall = (Alert.alert as jest.Mock).mock.calls[0];
-    const buttons: any[] = alertCall[2];
-    const personalButton = buttons.find(b => b.text === 'Personal');
-    await act(async () => { personalButton.onPress(); });
-
+    await act(async () => { fireEvent.press(screen.getAllByText('Personal')[0]); });
     expect(onAccept).toHaveBeenCalledWith('pending-1', 'cal-1');
   });
 
-  it('calls onDecline when Decline tapped on event_invite', async () => {
+  it('calls onDecline immediately when Decline tapped on event_invite', async () => {
     renderWithProviders(<PendingItems items={[eventInviteItem]} onAccept={onAccept} onDecline={onDecline} />);
     await act(async () => { fireEvent.press(screen.getByText('Decline')); });
-
-    // Confirm in the Alert
-    const alertCall = (Alert.alert as jest.Mock).mock.calls[0];
-    const buttons: any[] = alertCall[2];
-    const declineButton = buttons.find(b => b.text === 'Decline');
-    await act(async () => { declineButton.onPress(); });
-
     expect(onDecline).toHaveBeenCalledWith('pending-1');
-  });
-
-  it('shows "No Calendars" alert when accepting event_invite with no calendars', async () => {
-    jest.mock('@/contexts/calendar-context', () => ({
-      useCalendar: () => ({ calendars: [], events: mockEvents, getUser: mockGetUser }),
-    }));
-    // Re-render with overridden mock is complex — test the guard via Alert text instead
-    // by directly checking the branch: this is covered by the "No Calendars" text
-    // The calendar picker only shows calendar options, so with 0 calendars it shows the guard alert.
-    // This is verified via integration in the accept handler test.
   });
 
   // ── event_update ────────────────────────────────────────────────────────────
@@ -168,7 +140,7 @@ describe('PendingItems', () => {
     expect(onAccept).not.toHaveBeenCalled();
   });
 
-  it('shows sender name, event title, and new time in event_update description', () => {
+  it('shows sender name, event title in event_update description', () => {
     renderWithProviders(<PendingItems items={[eventUpdateItem]} onAccept={onAccept} onDecline={onDecline} />);
     expect(screen.getByText(/Jordan Lee updated/)).toBeTruthy();
     expect(screen.getByText(/Team Lunch/)).toBeTruthy();
@@ -176,7 +148,7 @@ describe('PendingItems', () => {
 
   it('shows "Event Updated" title for event_update', () => {
     renderWithProviders(<PendingItems items={[eventUpdateItem]} onAccept={onAccept} onDecline={onDecline} />);
-    expect(screen.getByText('Event Updated')).toBeTruthy();
+    expect(screen.getAllByText(/Event Updated/).length).toBeGreaterThan(0);
   });
 
   // ── other types ─────────────────────────────────────────────────────────────
@@ -187,16 +159,10 @@ describe('PendingItems', () => {
     expect(screen.getByText('Decline')).toBeTruthy();
   });
 
-  it('calls onAccept without calendarId for non-event-invite types', async () => {
+  it('calls onAccept immediately (no picker) for non-event-invite types', async () => {
     renderWithProviders(<PendingItems items={[calendarInviteItem]} onAccept={onAccept} onDecline={onDecline} />);
     await act(async () => { fireEvent.press(screen.getByText('Accept')); });
-
-    const alertCall = (Alert.alert as jest.Mock).mock.calls[0];
-    const buttons: any[] = alertCall[2];
-    const acceptButton = buttons.find(b => b.text === 'Accept');
-    await act(async () => { acceptButton.onPress(); });
-
-    expect(onAccept).toHaveBeenCalledWith('pending-3', undefined);
+    expect(onAccept).toHaveBeenCalledWith('pending-3');
   });
 
   it('renders multiple items', () => {
@@ -207,7 +173,7 @@ describe('PendingItems', () => {
         onDecline={onDecline}
       />
     );
-    expect(screen.getByText('Event Invitation')).toBeTruthy();
-    expect(screen.getByText('Event Updated')).toBeTruthy();
+    expect(screen.getAllByText(/Event Invitation/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Event Updated/).length).toBeGreaterThan(0);
   });
 });

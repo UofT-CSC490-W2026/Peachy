@@ -26,6 +26,7 @@ const config = {
     '@react-native-async-storage/async-storage': require.resolve('@react-native-async-storage/async-storage/jest/async-storage-mock'),
     '^expo-symbols$': '<rootDir>/__mocks__/expo-symbols.tsx',
     '^expo-av$': '<rootDir>/__mocks__/expo-av.tsx',
+    '^expo-constants$': '<rootDir>/__mocks__/expo-constants.ts',
   },
   testMatch: [
     '**/__tests__/**/*.{test,spec}.{ts,tsx}',

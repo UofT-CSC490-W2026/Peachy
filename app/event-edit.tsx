@@ -20,7 +20,7 @@ export default function EventEditScreen() {
   const params = useLocalSearchParams();
   const eventId = params.id as string;
 
-  const { calendars, events, updateEvent, getUser } = useCalendar();
+  const { calendars, events, updateEvent } = useCalendar();
   const { logout, user } = useAuth();
   const event = events.find(e => e.id === eventId);
   const isOwner = event && user && event.createdBy === user.id;
@@ -221,34 +221,6 @@ export default function EventEditScreen() {
             <IconSymbol name="chevron.right" size={16} color={tintColor} />
           </Pressable>
 
-          {/* Show invited users with RSVP status */}
-          {invitedUserIds.length > 0 && (
-            <View style={styles.inviteesList}>
-              {invitedUserIds.map(userId => {
-                const inviteeUser = getUser(userId);
-                if (!inviteeUser) return null;
-                const status = event.inviteeStatuses?.[userId] ?? 'pending';
-                const statusColor = status === 'accepted' ? '#22c55e' : status === 'declined' ? '#ef4444' : '#9BA1A6';
-                const statusLabel = status === 'accepted' ? 'Accepted' : status === 'declined' ? 'Declined' : 'Pending';
-                return (
-                  <View key={userId} style={[styles.inviteeChip, { backgroundColor: surfaceColor, borderColor }]}>
-                    <View style={styles.inviteeChipInfo}>
-                      <ThemedText style={styles.inviteeChipText}>{inviteeUser.name}</ThemedText>
-                      <View style={[styles.statusBadge, { backgroundColor: statusColor + '20', borderColor: statusColor }]}>
-                        <ThemedText style={[styles.statusText, { color: statusColor }]}>{statusLabel}</ThemedText>
-                      </View>
-                    </View>
-                    <Pressable
-                      onPress={() => setInvitedUserIds(invitedUserIds.filter(id => id !== userId))}
-                      hitSlop={8}
-                    >
-                      <IconSymbol name="xmark" size={14} color={tintColor} />
-                    </Pressable>
-                  </View>
-                );
-              })}
-            </View>
-          )}
         </FormField>
 
         {/* Availability Checker */}
@@ -411,41 +383,6 @@ const styles = StyleSheet.create({
   addPeopleText: {
     flex: 1,
     fontSize: 16,
-  },
-  inviteesList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 12,
-  },
-  inviteeChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 8,
-  },
-  inviteeChipText: {
-    fontSize: 14,
-  },
-  inviteeChipInfo: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  statusBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '600',
   },
   errorContainer: {
     flex: 1,

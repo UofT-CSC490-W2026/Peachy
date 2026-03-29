@@ -38,8 +38,9 @@ interface CalendarContextType {
   // Loading state
   isLoading: boolean;
   error: string | null;
-  // User lookup (still mocked)
+  // User lookup (cached)
   getUser: (userId: string) => User | undefined;
+  fetchUser: (userId: string) => Promise<User | undefined>;
   // Calendar visibility (client-side)
   toggleCalendarVisibility: (calendarId: string) => void;
   // Calendar CRUD
@@ -326,7 +327,11 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     );
 
     try {
-      await apiClient.put<CalendarEvent>(`calendars/${calendarId}/events/${eventId}`, data);
+      const updated = await apiClient.put<CalendarEvent>(`calendars/${calendarId}/events/${eventId}`, data);
+      // Replace with the server's authoritative response (handles calendarId moves, etc.)
+      setEvents(prev =>
+        prev.map(e => e.id === eventId ? updated : e)
+      );
     } catch (err) {
       // Revert by reloading
       await loadData();
@@ -417,6 +422,22 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     return userCacheRef.current.get(userId);
   }, [user]);
 
+  const fetchUser = useCallback(async (userId: string): Promise<User | undefined> => {
+    // Return from cache if already fetched
+    const cached = userCacheRef.current.get(userId);
+    if (cached) return cached;
+    if (user && userId === user.id) {
+      return { id: user.id, name: user.name ?? '', username: user.username ?? '', email: user.email ?? '', avatarUrl: user.avatarUrl, createdAt: '', updatedAt: '' };
+    }
+    try {
+      const fetched = await apiClient.get<User>(`users/${userId}`);
+      userCacheRef.current.set(userId, fetched);
+      return fetched;
+    } catch {
+      return undefined;
+    }
+  }, [apiClient, user]);
+
   // ── Derived state ─────────────────────────────────────────────────────────
 
   const visibleEvents = useMemo(() => {
@@ -436,6 +457,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         isLoading,
         error,
         getUser,
+        fetchUser,
         toggleCalendarVisibility,
         refreshCalendars,
         createCalendar,

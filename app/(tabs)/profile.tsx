@@ -1,5 +1,5 @@
-import { StyleSheet, View, ScrollView, Pressable, Image } from 'react-native';
-import { useMemo } from 'react';
+import { StyleSheet, View, ScrollView, Pressable, Image, RefreshControl } from 'react-native';
+import { useMemo, useState, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -17,9 +17,16 @@ export default function ProfileScreen() {
   const borderColor = useThemeColor({}, 'border');
   const surfaceColor = useThemeColor({}, 'surface');
   const tintColor = useThemeColor({}, 'tint');
-  const { user } = useAuth();
+  const { user, fetchProfile } = useAuth();
   const { friends } = useFriends();
   const { selected } = useInterests(user?.interests);
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await fetchProfile().catch(() => {});
+    setIsRefreshing(false);
+  }, [fetchProfile]);
 
   const { categoriesWithTags, hasInterests } = useMemo(() => {
     let remaining = 20;
@@ -60,7 +67,10 @@ export default function ProfileScreen() {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
+      >
         {/* Profile header */}
         <View style={styles.profileHeader}>
           {user?.avatarUrl ? (

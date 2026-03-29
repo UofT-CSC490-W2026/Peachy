@@ -280,7 +280,7 @@ export default function CalendarSettingsScreen() {
                         </ThemedText>
                       </View>
                       {!isOwner && (
-                        <Pressable onPress={() => handleRemoveMember(userId)} hitSlop={8}>
+                        <Pressable testID={`remove-member-${userId}`} onPress={() => handleRemoveMember(userId)} hitSlop={8}>
                           <IconSymbol name="xmark" size={20} color={dangerColor} />
                         </Pressable>
                       )}

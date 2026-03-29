@@ -18,13 +18,14 @@ export default function EventDetailScreen() {
   const params = useLocalSearchParams();
   const eventId = params.id as string;
 
-  const { calendars, events, deleteEvent, getUser } = useCalendar();
+  const { calendars, events, deleteEvent, getUser, fetchUser } = useCalendar();
   const { logout, user, getIdToken } = useAuth();
 
   const localEvent = events.find(e => e.id === eventId);
   const [fetchedEvent, setFetchedEvent] = useState<CalendarEvent | null>(null);
   // Start in loading state immediately if we'll need to fetch (avoids "Event not found" flash)
   const [isFetching, setIsFetching] = useState(!localEvent && !!eventId);
+  const [inviteeNames, setInviteeNames] = useState<Record<string, string>>({});
 
   // If not in local state (e.g. pending invite not yet accepted), fetch from API
   useEffect(() => {
@@ -52,6 +53,19 @@ export default function EventDetailScreen() {
   }, [eventId, localEvent, getIdToken]);
 
   const event = localEvent ?? fetchedEvent;
+
+  // Fetch display names for invitees not already in the user cache
+  useEffect(() => {
+    const inviteeIds = event?.invitedUserIds ?? [];
+    if (inviteeIds.length === 0) return;
+    inviteeIds.forEach(uid => {
+      if (!getUser(uid)) {
+        fetchUser(uid).then(u => {
+          if (u) setInviteeNames(prev => ({ ...prev, [uid]: u.name }));
+        });
+      }
+    });
+  }, [event?.invitedUserIds, fetchUser, getUser]);
   const calendar = event ? calendars.find(c => c.id === event.calendarId) : null;
   const isOwner = event && user && event.createdBy === user.id;
 
@@ -220,11 +234,11 @@ export default function EventDetailScreen() {
                       <View key={inviteeId} style={styles.inviteeRow}>
                         <View style={[styles.inviteeAvatar, { backgroundColor: tintColor + '20' }]}>
                           <ThemedText style={[styles.inviteeAvatarText, { color: tintColor }]}>
-                            {inviteeUser ? inviteeUser.name.charAt(0) : '?'}
+                            {(inviteeUser?.name ?? inviteeNames[inviteeId] ?? '?').charAt(0).toUpperCase()}
                           </ThemedText>
                         </View>
                         <ThemedText style={styles.inviteeName}>
-                          {inviteeUser?.name ?? inviteeId}
+                          {inviteeUser?.name ?? inviteeNames[inviteeId] ?? inviteeId}
                         </ThemedText>
                         <View style={[styles.statusBadge, { backgroundColor: statusColor + '20', borderColor: statusColor }]}>
                           <ThemedText style={[styles.statusText, { color: statusColor }]}>

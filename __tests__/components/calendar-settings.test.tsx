@@ -119,16 +119,7 @@ it('calls removeCalendarMember after confirming removal', async () => {
   const removeButtons = screen.getAllByTestId ? [] : []; // use press on xmark icon
   // Find the pressable for member removal — Jordan Lee is a non-owner member
   await act(async () => {
-    // Alert is shown on press; find the remove (xmark) button near "Jordan Lee"
-    const xmarkButtons = screen.UNSAFE_getAllByType(require('react-native').Pressable)
-      .filter((p: any) => {
-        // The remove pressable is the one with onPress calling handleRemoveMember
-        const children = p.props.children;
-        return children && React.isValidElement(children) && (children as any).props?.name === 'xmark';
-      });
-    if (xmarkButtons.length > 0) {
-      fireEvent.press(xmarkButtons[0]);
-    }
+    fireEvent.press(screen.getByTestId('remove-member-member-1'));
   });
   expect(Alert.alert).toHaveBeenCalledWith(
     'Remove Member',
