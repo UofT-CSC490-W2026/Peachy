@@ -30,6 +30,7 @@ export function CalendarFilterBar({ calendars, onToggle }: CalendarFilterBarProp
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 20,
-    paddingVertical: 8,
+    paddingTop: 2,
+    paddingBottom: 4,
   },
 });

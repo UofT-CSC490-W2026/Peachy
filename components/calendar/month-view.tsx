@@ -2,6 +2,7 @@ import { StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { MonthDayCell } from './month-day-cell';
+import { MonthDayPreview } from './month-day-preview';
 import { Calendar, CalendarEvent } from '@/types';
 import { getMonthGrid, getEventsForDay, isSameDay } from '@/utils/date-helpers';
 
@@ -17,6 +18,7 @@ export function MonthView({ currentDate, events, selectedDate, onSelectDate, cal
   const textSecondary = useThemeColor({}, 'textSecondary');
 
   const monthGrid = getMonthGrid(currentDate.getFullYear(), currentDate.getMonth());
+  const selectedDayEvents = getEventsForDay(events, selectedDate);
   const today = new Date();
 
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -59,6 +61,12 @@ export function MonthView({ currentDate, events, selectedDate, onSelectDate, cal
           );
         })}
       </View>
+
+      <MonthDayPreview
+        selectedDate={selectedDate}
+        events={selectedDayEvents}
+        calendars={calendars}
+      />
     </View>
   );
 }
@@ -84,5 +92,6 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     flexWrap: 'wrap',
+    marginBottom: 2,
   },
 });

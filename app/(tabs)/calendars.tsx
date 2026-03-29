@@ -8,15 +8,13 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useCalendar } from '@/contexts/calendar-context';
 import { Calendar } from '@/types';
 import { CalendarHeader } from '@/components/calendar/calendar-header';
-import { ViewSwitcher, CalendarView } from '@/components/calendar/view-switcher';
 import { CalendarFilterBar } from '@/components/calendar/calendar-filter-bar';
 import { MonthView } from '@/components/calendar/month-view';
 import { WeekView } from '@/components/calendar/week-view';
 import { DayView } from '@/components/calendar/day-view';
-import { EventList } from '@/components/calendar/event-list';
-import { getEventsForDay } from '@/utils/date-helpers';
 
 type TabView = 'calendar' | 'manage';
+type CalendarView = 'day' | 'week' | 'month';
 
 export default function CalendarsScreen() {
   const { calendars, visibleEvents, toggleCalendarVisibility } = useCalendar();
@@ -30,6 +28,7 @@ export default function CalendarsScreen() {
   const [currentView, setCurrentView] = useState<CalendarView>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [isFilterExpanded, setIsFilterExpanded] = useState(false);
 
   const handlePrevMonth = () => {
     const newDate = new Date(currentDate);
@@ -49,7 +48,8 @@ export default function CalendarsScreen() {
     setSelectedDate(today);
   };
 
-  const selectedDayEvents = getEventsForDay(visibleEvents, selectedDate);
+  const visibleCalendarCount = calendars.filter(calendar => calendar.isVisible).length;
+  const isManageView = tabView === 'manage';
 
   const renderCalendar = ({ item }: { item: Calendar }) => (
     <Pressable
@@ -77,49 +77,35 @@ export default function CalendarsScreen() {
   return (
     <ThemedView style={styles.container}>
       <View style={styles.header}>
-        <ThemedText type="title">Calendars</ThemedText>
-        <Pressable
-          style={[styles.addButton, { backgroundColor: tintColor }]}
-          onPress={() => router.push('/calendar-create')}
-        >
-          <IconSymbol name="plus" size={24} color="#FFFFFF" />
-        </Pressable>
-      </View>
-
-      {/* Segmented Control */}
-      <View style={[styles.segmentedControl, { backgroundColor: surfaceColor }]}>
-        <Pressable
-          style={[
-            styles.segmentButton,
-            tabView === 'calendar' && { backgroundColor: tintColor },
-          ]}
-          onPress={() => setTabView('calendar')}
-        >
-          <ThemedText
-            style={[
-              styles.segmentText,
-              tabView === 'calendar' && styles.segmentTextActive,
-            ]}
-          >
-            Calendar
+        <View style={styles.headerTitleRow}>
+          <ThemedText type="title" style={styles.headerTitle} numberOfLines={1}>
+            Calendars
           </ThemedText>
-        </Pressable>
-        <Pressable
-          style={[
-            styles.segmentButton,
-            tabView === 'manage' && { backgroundColor: tintColor },
-          ]}
-          onPress={() => setTabView('manage')}
-        >
-          <ThemedText
+        </View>
+        <View style={styles.headerActions}>
+          <Pressable
             style={[
-              styles.segmentText,
-              tabView === 'manage' && styles.segmentTextActive,
+              styles.manageButton,
+              { borderColor: tintColor, backgroundColor: isManageView ? `${tintColor}20` : 'transparent' },
             ]}
+            onPress={() => {
+              if (!isManageView) {
+                setIsFilterExpanded(false);
+              }
+              setTabView(isManageView ? 'calendar' : 'manage');
+            }}
           >
-            Manage
-          </ThemedText>
-        </Pressable>
+            <ThemedText style={[styles.manageButtonText, { color: tintColor }]}>
+              {isManageView ? 'Calendar' : 'Manage'}
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            style={[styles.addButton, { backgroundColor: tintColor }]}
+            onPress={() => router.push('/calendar-create')}
+          >
+            <IconSymbol name="plus" size={24} color="#FFFFFF" />
+          </Pressable>
+        </View>
       </View>
 
       {/* Calendar View */}
@@ -131,12 +117,32 @@ export default function CalendarsScreen() {
               onPrevMonth={handlePrevMonth}
               onNextMonth={handleNextMonth}
               onToday={handleToday}
+              currentView={currentView}
+              onViewChange={setCurrentView}
             />
-            <ViewSwitcher currentView={currentView} onViewChange={setCurrentView} />
-            <CalendarFilterBar
-              calendars={calendars}
-              onToggle={toggleCalendarVisibility}
-            />
+            <Pressable
+              style={[styles.filterPill, { borderColor, backgroundColor: surfaceColor }]}
+              onPress={() => setIsFilterExpanded(prev => !prev)}
+            >
+              <ThemedText
+                style={styles.filterPillText}
+                lightColor={textSecondary}
+                darkColor={textSecondary}
+              >
+                Filters ({visibleCalendarCount}/{calendars.length})
+              </ThemedText>
+              <IconSymbol
+                name={isFilterExpanded ? 'chevron.up' : 'chevron.down'}
+                size={14}
+                color={textSecondary}
+              />
+            </Pressable>
+            {isFilterExpanded && (
+              <CalendarFilterBar
+                calendars={calendars}
+                onToggle={toggleCalendarVisibility}
+              />
+            )}
           </View>
 
           <View style={styles.content}>
@@ -153,7 +159,6 @@ export default function CalendarsScreen() {
                   onSelectDate={setSelectedDate}
                   calendars={calendars}
                 />
-                <EventList events={selectedDayEvents} selectedDate={selectedDate} calendars={calendars} />
               </ScrollView>
             )}
             {currentView === 'week' && (
@@ -189,7 +194,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 60,
-    paddingBottom: 16,
+    paddingBottom: 10,
+  },
+  headerTitleRow: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerTitle: {
+    flexShrink: 1,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  manageButton: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  manageButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   addButton: {
     width: 40,
@@ -198,29 +228,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  segmentedControl: {
-    flexDirection: 'row',
-    marginHorizontal: 20,
-    marginBottom: 12,
-    padding: 4,
-    borderRadius: 10,
-  },
-  segmentButton: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  segmentText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  segmentTextActive: {
-    color: '#FFFFFF',
-  },
   calendarHeader: {
-    paddingBottom: 8,
+    paddingBottom: 4,
+  },
+  filterPill: {
+    marginHorizontal: 20,
+    marginTop: 2,
+    marginBottom: 4,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  filterPillText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   content: {
     flex: 1,

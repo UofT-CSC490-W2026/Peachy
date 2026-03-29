@@ -81,13 +81,13 @@ const styles = StyleSheet.create({
     width: '14.2857%',
     aspectRatio: 1,
     borderWidth: 0.5,
-    padding: 4,
+    padding: 3,
     alignItems: 'center',
   },
   dayNumberContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 4,
+    marginTop: 2,
   },
   dayNumber: {
     fontSize: 14,
@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
   eventDots: {
     flexDirection: 'row',
     gap: 3,
-    marginTop: 4,
+    marginTop: 3,
   },
   eventDot: {
     width: 4,
