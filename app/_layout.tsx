@@ -113,7 +113,7 @@ function RootNavigator() {
               <Stack.Screen name="friends" options={{ presentation: 'modal', headerShown: false }} />
               <Stack.Screen name="interests" options={{ presentation: 'modal', headerShown: false }} />
             </Stack>
-            <StatusBar style="auto" />
+            <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
           </ThemeProvider>
         </ChatProvider>
       </FriendsProvider>

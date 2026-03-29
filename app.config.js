@@ -16,6 +16,9 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: IS_DEV ? 'com.peachy.dev' : 'com.peachy.app',
+      infoPlist: {
+        UIViewControllerBasedStatusBarAppearance: true,
+      },
     },
     android: {
       adaptiveIcon: {
