@@ -6,7 +6,7 @@ import { EventCard } from './event-card';
 import {
   getEventsForToday,
   getEventsForTomorrow,
-  getEventsThisWeek,
+  getFutureEvents,
   formatDateSectionHeader,
 } from '@/utils/date-helpers';
 
@@ -27,20 +27,19 @@ export function UpcomingEvents({ events, calendars }: UpcomingEventsProps) {
   // Group events
   const todayEvents = getEventsForToday(events);
   const tomorrowEvents = getEventsForTomorrow(events);
-  const thisWeekEvents = getEventsThisWeek(events);
+  const futureEvents = getFutureEvents(events);
 
-  // Group "This Week" events by date
-  const weekEventsByDate: Record<string, CalendarEvent[]> = {};
-  thisWeekEvents.forEach(event => {
-    const startDate = new Date(event.startTime);
-    const dateKey = startDate.toDateString();
-    if (!weekEventsByDate[dateKey]) {
-      weekEventsByDate[dateKey] = [];
+  // Group future events by date
+  const futureEventsByDate: Record<string, CalendarEvent[]> = {};
+  futureEvents.forEach(event => {
+    const dateKey = new Date(event.startTime).toDateString();
+    if (!futureEventsByDate[dateKey]) {
+      futureEventsByDate[dateKey] = [];
     }
-    weekEventsByDate[dateKey].push(event);
+    futureEventsByDate[dateKey].push(event);
   });
 
-  const hasAnyEvents = todayEvents.length > 0 || tomorrowEvents.length > 0 || thisWeekEvents.length > 0;
+  const hasAnyEvents = todayEvents.length > 0 || tomorrowEvents.length > 0 || futureEvents.length > 0;
 
   if (!hasAnyEvents) {
     return (
@@ -89,31 +88,26 @@ export function UpcomingEvents({ events, calendars }: UpcomingEventsProps) {
         </View>
       )}
 
-      {/* This Week */}
-      {thisWeekEvents.length > 0 && (
+      {/* Future events grouped by date */}
+      {futureEvents.length > 0 && (
         <View style={styles.section}>
           <ThemedText style={[styles.sectionHeader, { color: textSecondary }]}>
-            THIS WEEK
+            UPCOMING
           </ThemedText>
-          {Object.keys(weekEventsByDate).map(dateKey => {
-            const dateEvents = weekEventsByDate[dateKey];
-            const date = new Date(dateKey);
-
-            return (
-              <View key={dateKey}>
-                <ThemedText style={styles.dateSubheader}>
-                  {formatDateSectionHeader(date)}
-                </ThemedText>
-                {dateEvents.map(event => (
-                  <EventCard
-                    key={event.id}
-                    event={event}
-                    calendarColor={calendarColors[event.calendarId] || '#FF8C6B'}
-                  />
-                ))}
-              </View>
-            );
-          })}
+          {Object.keys(futureEventsByDate).map(dateKey => (
+            <View key={dateKey}>
+              <ThemedText style={styles.dateSubheader}>
+                {formatDateSectionHeader(new Date(dateKey))}
+              </ThemedText>
+              {futureEventsByDate[dateKey].map(event => (
+                <EventCard
+                  key={event.id}
+                  event={event}
+                  calendarColor={calendarColors[event.calendarId] || '#FF8C6B'}
+                />
+              ))}
+            </View>
+          ))}
         </View>
       )}
     </View>
