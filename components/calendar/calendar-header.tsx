@@ -2,7 +2,7 @@ import { StyleSheet, View, Pressable } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { getMonthName } from '@/utils/date-helpers';
+import { getMonthName, getWeekDates } from '@/utils/date-helpers';
 
 type CalendarView = 'day' | 'week' | 'month';
 
@@ -30,6 +30,40 @@ export function CalendarHeader({
   const monthName = getMonthName(currentDate.getMonth());
   const year = currentDate.getFullYear();
   const views: CalendarView[] = ['day', 'week', 'month'];
+  const activeView = currentView ?? 'month';
+
+  const getHeaderLabel = () => {
+    if (activeView === 'day') {
+      return currentDate.toLocaleDateString(undefined, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+    }
+
+    if (activeView === 'week') {
+      const weekDates = getWeekDates(currentDate);
+      const start = weekDates[0];
+      const end = weekDates[6];
+      const startMonth = getMonthName(start.getMonth()).slice(0, 3);
+      const endMonth = getMonthName(end.getMonth()).slice(0, 3);
+
+      if (start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth()) {
+        return `${startMonth} ${start.getDate()}-${end.getDate()}, ${start.getFullYear()}`;
+      }
+
+      if (start.getFullYear() === end.getFullYear()) {
+        return `${startMonth} ${start.getDate()} - ${endMonth} ${end.getDate()}, ${start.getFullYear()}`;
+      }
+
+      return `${startMonth} ${start.getDate()}, ${start.getFullYear()} - ${endMonth} ${end.getDate()}, ${end.getFullYear()}`;
+    }
+
+    return `${monthName} ${year}`;
+  };
+
+  const headerLabel = getHeaderLabel();
 
   return (
     <View style={styles.container}>
@@ -39,7 +73,7 @@ export function CalendarHeader({
             <IconSymbol name="chevron.left" size={22} color={iconColor} />
           </Pressable>
           <ThemedText type="defaultSemiBold" style={styles.title} numberOfLines={1}>
-            {monthName} {year}
+            {headerLabel}
           </ThemedText>
           <Pressable onPress={onNextMonth} style={styles.iconButton}>
             <IconSymbol name="chevron.right" size={22} color={iconColor} />

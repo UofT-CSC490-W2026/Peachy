@@ -6,32 +6,93 @@ import { EventBlock } from './event-block';
 import { Calendar, CalendarEvent } from '@/types';
 import { getEventTopOffset, getEventHeight } from '@/utils/date-helpers';
 
-function computeEventLayout(
-  events: CalendarEvent[]
-): Record<string, { left: number; width: number }> {
-  if (!events.length) return {};
-  const sorted = [...events].sort(
-    (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
-  );
-  const eventCol: Record<string, number> = {};
-  const colEnds: number[] = [];
+function getEffectiveEventRange(event: CalendarEvent, columnDate?: Date) {
+  const rawStart = new Date(event.startTime);
+  const rawEnd = new Date(event.endTime);
 
-  for (const ev of sorted) {
-    const start = new Date(ev.startTime).getTime();
-    const end = new Date(ev.endTime).getTime();
-    let col = colEnds.findIndex(e => e <= start);
-    if (col === -1) { col = colEnds.length; colEnds.push(end); }
-    else { colEnds[col] = Math.max(colEnds[col], end); }
-    eventCol[ev.id] = col;
+  if (!columnDate) {
+    return { start: rawStart, end: rawEnd };
   }
 
-  const total = colEnds.length;
-  return Object.fromEntries(
-    events.map(ev => [
-      ev.id,
-      { left: (eventCol[ev.id] / total) * 100, width: 100 / total },
-    ])
-  );
+  const dayStart = new Date(columnDate);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+
+  const clampedStart = rawStart < dayStart ? dayStart : rawStart;
+  const clampedEnd = rawEnd > dayEnd ? dayEnd : rawEnd;
+
+  if (clampedEnd <= clampedStart) {
+    const minEnd = new Date(clampedStart.getTime() + 1);
+    return { start: clampedStart, end: minEnd };
+  }
+
+  return { start: clampedStart, end: clampedEnd };
+}
+
+function computeEventLayout(
+  events: CalendarEvent[],
+  columnDate?: Date,
+): Record<string, { left: number; width: number }> {
+  if (!events.length) return {};
+
+  const normalized = events
+    .map((event) => {
+      const { start, end } = getEffectiveEventRange(event, columnDate);
+      return {
+        event,
+        startMs: start.getTime(),
+        endMs: end.getTime(),
+      };
+    })
+    .sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
+
+  const groups: typeof normalized[] = [];
+  let currentGroup: typeof normalized = [];
+  let currentGroupEnd = -Infinity;
+
+  for (const item of normalized) {
+    if (!currentGroup.length || item.startMs < currentGroupEnd) {
+      currentGroup.push(item);
+      currentGroupEnd = Math.max(currentGroupEnd, item.endMs);
+    } else {
+      groups.push(currentGroup);
+      currentGroup = [item];
+      currentGroupEnd = item.endMs;
+    }
+  }
+
+  if (currentGroup.length) {
+    groups.push(currentGroup);
+  }
+
+  const layout: Record<string, { left: number; width: number }> = {};
+
+  for (const group of groups) {
+    const colEnds: number[] = [];
+    const eventCol: Record<string, number> = {};
+
+    for (const item of group) {
+      let col = colEnds.findIndex((endMs) => endMs <= item.startMs);
+      if (col === -1) {
+        col = colEnds.length;
+        colEnds.push(item.endMs);
+      } else {
+        colEnds[col] = item.endMs;
+      }
+      eventCol[item.event.id] = col;
+    }
+
+    const totalCols = Math.max(1, colEnds.length);
+    for (const item of group) {
+      layout[item.event.id] = {
+        left: (eventCol[item.event.id] / totalCols) * 100,
+        width: 100 / totalCols,
+      };
+    }
+  }
+
+  return layout;
 }
 
 interface TimeGridProps {
@@ -50,18 +111,7 @@ export function TimeGrid({ events, calendars, columns = 1, getColumnEvents, getC
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
   const renderEvent = (event: CalendarEvent, layout?: { left: number; width: number }, columnDate?: Date) => {
-    const rawStart = new Date(event.startTime);
-    const rawEnd = new Date(event.endTime);
-    let effectiveStart = rawStart;
-    let effectiveEnd = rawEnd;
-    if (columnDate) {
-      const dayStart = new Date(columnDate);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(dayStart);
-      dayEnd.setDate(dayEnd.getDate() + 1);
-      if (rawStart < dayStart) effectiveStart = dayStart;
-      if (rawEnd > dayEnd) effectiveEnd = dayEnd;
-    }
+    const { start: effectiveStart, end: effectiveEnd } = getEffectiveEventRange(event, columnDate);
     const top = getEventTopOffset(effectiveStart);
     const height = getEventHeight(effectiveStart, effectiveEnd);
     const cal = calendars.find(c => c.id === event.calendarId);
@@ -108,7 +158,8 @@ export function TimeGrid({ events, calendars, columns = 1, getColumnEvents, getC
         <View style={styles.columnsContainer}>
           {Array.from({ length: columns }, (_, columnIndex) => {
             const columnEvents = getColumnEvents ? getColumnEvents(columnIndex) : events;
-            const layout = computeEventLayout(columnEvents);
+            const columnDate = getColumnDate ? getColumnDate(columnIndex) : undefined;
+            const layout = computeEventLayout(columnEvents, columnDate);
 
             return (
               <View

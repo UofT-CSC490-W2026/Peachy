@@ -29,16 +29,49 @@ export default function CalendarsScreen() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
+  const [weekScrollToken, setWeekScrollToken] = useState(0);
 
-  const handlePrevMonth = () => {
-    const newDate = new Date(currentDate);
-    newDate.setMonth(newDate.getMonth() - 1);
+  const handlePrevPeriod = () => {
+    if (currentView === 'month') {
+      const newDate = new Date(currentDate);
+      newDate.setMonth(newDate.getMonth() - 1);
+      setCurrentDate(newDate);
+      return;
+    }
+
+    if (currentView === 'week') {
+      const newDate = new Date(currentDate);
+      newDate.setDate(newDate.getDate() - 7);
+      setCurrentDate(newDate);
+      setSelectedDate(newDate);
+      return;
+    }
+
+    const newDate = new Date(selectedDate);
+    newDate.setDate(newDate.getDate() - 1);
+    setSelectedDate(newDate);
     setCurrentDate(newDate);
   };
 
-  const handleNextMonth = () => {
-    const newDate = new Date(currentDate);
-    newDate.setMonth(newDate.getMonth() + 1);
+  const handleNextPeriod = () => {
+    if (currentView === 'month') {
+      const newDate = new Date(currentDate);
+      newDate.setMonth(newDate.getMonth() + 1);
+      setCurrentDate(newDate);
+      return;
+    }
+
+    if (currentView === 'week') {
+      const newDate = new Date(currentDate);
+      newDate.setDate(newDate.getDate() + 7);
+      setCurrentDate(newDate);
+      setSelectedDate(newDate);
+      return;
+    }
+
+    const newDate = new Date(selectedDate);
+    newDate.setDate(newDate.getDate() + 1);
+    setSelectedDate(newDate);
     setCurrentDate(newDate);
   };
 
@@ -46,10 +79,14 @@ export default function CalendarsScreen() {
     const today = new Date();
     setCurrentDate(today);
     setSelectedDate(today);
+
+    if (currentView === 'week') {
+      setWeekScrollToken(prev => prev + 1);
+    }
   };
 
-  const visibleCalendarCount = calendars.filter(calendar => calendar.isVisible).length;
   const isManageView = tabView === 'manage';
+  const headerDate = currentView === 'day' ? selectedDate : currentDate;
 
   const renderCalendar = ({ item }: { item: Calendar }) => (
     <Pressable
@@ -83,6 +120,26 @@ export default function CalendarsScreen() {
           </ThemedText>
         </View>
         <View style={styles.headerActions}>
+          {!isManageView && (
+            <Pressable
+              style={[
+                styles.topFilterButton,
+                {
+                  borderColor: tintColor,
+                  backgroundColor: isFilterExpanded ? `${tintColor}20` : 'transparent',
+                },
+              ]}
+              onPress={() => setIsFilterExpanded(prev => !prev)}
+              accessibilityRole="button"
+              accessibilityLabel="Toggle calendar filters"
+            >
+              <IconSymbol
+                name="line.horizontal.3"
+                size={18}
+                color={tintColor}
+              />
+            </Pressable>
+          )}
           <Pressable
             style={[
               styles.manageButton,
@@ -113,30 +170,13 @@ export default function CalendarsScreen() {
         <>
           <View style={styles.calendarHeader}>
             <CalendarHeader
-              currentDate={currentDate}
-              onPrevMonth={handlePrevMonth}
-              onNextMonth={handleNextMonth}
+              currentDate={headerDate}
+              onPrevMonth={handlePrevPeriod}
+              onNextMonth={handleNextPeriod}
               onToday={handleToday}
               currentView={currentView}
               onViewChange={setCurrentView}
             />
-            <Pressable
-              style={[styles.filterPill, { borderColor, backgroundColor: surfaceColor }]}
-              onPress={() => setIsFilterExpanded(prev => !prev)}
-            >
-              <ThemedText
-                style={styles.filterPillText}
-                lightColor={textSecondary}
-                darkColor={textSecondary}
-              >
-                Filters ({visibleCalendarCount}/{calendars.length})
-              </ThemedText>
-              <IconSymbol
-                name={isFilterExpanded ? 'chevron.up' : 'chevron.down'}
-                size={14}
-                color={textSecondary}
-              />
-            </Pressable>
             {isFilterExpanded && (
               <CalendarFilterBar
                 calendars={calendars}
@@ -162,7 +202,12 @@ export default function CalendarsScreen() {
               </ScrollView>
             )}
             {currentView === 'week' && (
-              <WeekView currentDate={currentDate} events={visibleEvents} calendars={calendars} />
+              <WeekView
+                currentDate={currentDate}
+                events={visibleEvents}
+                calendars={calendars}
+                scrollToDateToken={weekScrollToken}
+              />
             )}
             {currentView === 'day' && (
               <DayView currentDate={selectedDate} events={visibleEvents} calendars={calendars} />
@@ -211,6 +256,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  topFilterButton: {
+    width: 34,
+    height: 34,
+    borderWidth: 1,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   manageButton: {
     borderWidth: 1,
     borderRadius: 16,
@@ -230,23 +283,6 @@ const styles = StyleSheet.create({
   },
   calendarHeader: {
     paddingBottom: 4,
-  },
-  filterPill: {
-    marginHorizontal: 20,
-    marginTop: 2,
-    marginBottom: 4,
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  filterPillText: {
-    fontSize: 13,
-    fontWeight: '600',
   },
   content: {
     flex: 1,
