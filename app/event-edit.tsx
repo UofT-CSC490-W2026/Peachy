@@ -23,7 +23,7 @@ export default function EventEditScreen() {
   const { calendars, events, updateEvent } = useCalendar();
   const { logout, user } = useAuth();
   const event = events.find(e => e.id === eventId);
-  const isOwner = event && user && event.createdBy === user.id;
+  const isOwner = event && user && event.createdBy === user.id && !event.linkedEventId;
 
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');

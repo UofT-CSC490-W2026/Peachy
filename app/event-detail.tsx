@@ -54,20 +54,21 @@ export default function EventDetailScreen() {
 
   const event = localEvent ?? fetchedEvent;
 
-  // Fetch display names for invitees not already in the user cache
+  // Fetch display names for invitees and organizer (linked events) not already in the user cache
   useEffect(() => {
-    const inviteeIds = event?.invitedUserIds ?? [];
-    if (inviteeIds.length === 0) return;
-    inviteeIds.forEach(uid => {
+    const idsToFetch = new Set(event?.invitedUserIds ?? []);
+    if (event?.originalCreatedBy) idsToFetch.add(event.originalCreatedBy);
+    if (idsToFetch.size === 0) return;
+    idsToFetch.forEach(uid => {
       if (!getUser(uid)) {
         fetchUser(uid).then(u => {
           if (u) setInviteeNames(prev => ({ ...prev, [uid]: u.name }));
         });
       }
     });
-  }, [event?.invitedUserIds, fetchUser, getUser]);
+  }, [event?.invitedUserIds, event?.originalCreatedBy, fetchUser, getUser]);
   const calendar = event ? calendars.find(c => c.id === event.calendarId) : null;
-  const isOwner = event && user && event.createdBy === user.id;
+  const isOwner = event && user && event.createdBy === user.id && !event.linkedEventId;
 
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');
@@ -150,6 +151,16 @@ export default function EventDetailScreen() {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+        {/* Invited badge */}
+        {event.linkedEventId && (
+          <View style={[styles.aiBadge, { backgroundColor: tintColor + '10', borderColor: borderColor }]}>
+            <IconSymbol name="person.2" size={14} color={textSecondary} />
+            <ThemedText style={[styles.aiText, { color: textSecondary }]}>
+              You were invited to this event
+            </ThemedText>
+          </View>
+        )}
+
         {/* AI Attribution Badge */}
         {event.aiGenerated && event.aiInput && (
           <View style={[styles.aiBadge, { backgroundColor: tintColor + '10', borderColor: borderColor }]}>
@@ -209,6 +220,28 @@ export default function EventDetailScreen() {
                 <ThemedText style={[styles.sectionSubtext, { color: textSecondary }]}>
                   {event.location}
                 </ThemedText>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Organizer — shown on linked copies so invitees know who created the event */}
+        {event.originalCreatedBy && (
+          <View style={[styles.section, { backgroundColor: surfaceColor, borderColor }]}>
+            <View style={styles.sectionRow}>
+              <IconSymbol name="person.fill" size={24} color={tintColor} />
+              <View style={styles.sectionContent}>
+                <ThemedText type="defaultSemiBold">Organizer</ThemedText>
+                <View style={styles.inviteeRow}>
+                  <View style={[styles.inviteeAvatar, { backgroundColor: tintColor + '20' }]}>
+                    <ThemedText style={[styles.inviteeAvatarText, { color: tintColor }]}>
+                      {(getUser(event.originalCreatedBy)?.name ?? inviteeNames[event.originalCreatedBy] ?? '?').charAt(0).toUpperCase()}
+                    </ThemedText>
+                  </View>
+                  <ThemedText style={styles.inviteeName}>
+                    {getUser(event.originalCreatedBy)?.name ?? inviteeNames[event.originalCreatedBy] ?? event.originalCreatedBy}
+                  </ThemedText>
+                </View>
               </View>
             </View>
           </View>
