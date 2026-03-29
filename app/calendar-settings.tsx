@@ -1,5 +1,5 @@
 import { StyleSheet, ScrollView, View, Pressable, Alert, ActivityIndicator } from 'react-native';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
@@ -12,14 +12,13 @@ import { useAuth } from '@/contexts/auth-context';
 import { AuthError } from '@/utils/api-client';
 import { calendarColors } from '@/constants/theme';
 import { CalendarType } from '@/types';
-import { contacts } from '@/data/mock-data';
 
 export default function CalendarSettingsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const calendarId = params.id as string;
 
-  const { calendars, updateCalendar, deleteCalendar } = useCalendar();
+  const { calendars, updateCalendar, deleteCalendar, addCalendarMember, removeCalendarMember, getUser } = useCalendar();
   const { logout } = useAuth();
   const calendar = calendars.find(cal => cal.id === calendarId);
 
@@ -33,8 +32,24 @@ export default function CalendarSettingsScreen() {
   const [description, setDescription] = useState(calendar?.description || '');
   const [selectedColor, setSelectedColor] = useState(calendar?.color || calendarColors[0]);
   const [calendarType, setCalendarType] = useState<CalendarType>(calendar?.type || 'personal');
-  const [memberIds, setMemberIds] = useState<string[]>(calendar?.memberIds || []);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Handle users returned from the user-search screen
+  useEffect(() => {
+    if (!params.selectedUsers) return;
+    try {
+      const parsed: unknown = JSON.parse(params.selectedUsers as string);
+      if (!Array.isArray(parsed)) return;
+      const newUserIds = (parsed as string[]).filter(
+        id => typeof id === 'string' && !calendar?.memberIds.includes(id)
+      );
+      newUserIds.forEach(userId => {
+        addCalendarMember(calendarId, userId).catch(err => {
+          Alert.alert('Error', err instanceof Error ? err.message : 'Failed to add member');
+        });
+      });
+    } catch { /* ignore malformed param */ }
+  }, [params.selectedUsers]);
 
   if (!calendar) {
     return (
@@ -112,7 +127,24 @@ export default function CalendarSettingsScreen() {
       Alert.alert('Cannot Remove', 'You cannot remove the calendar owner');
       return;
     }
-    setMemberIds(memberIds.filter(id => id !== userId));
+    const user = getUser(userId);
+    const name = user?.name ?? 'this member';
+    Alert.alert(
+      'Remove Member',
+      `Remove ${name} from this calendar?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            removeCalendarMember(calendarId, userId).catch(err => {
+              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to remove member');
+            });
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -223,13 +255,13 @@ export default function CalendarSettingsScreen() {
               <IconSymbol name="chevron.right" size={16} color={tintColor} />
             </Pressable>
 
-            {/* Member List */}
-            {memberIds.length > 0 && (
+            {/* Member List — driven by live context, not local state */}
+            {(calendar.memberIds.length > 0) && (
               <View style={styles.membersList}>
-                {memberIds.map(userId => {
-                  const user = contacts.find(c => c.id === userId);
+                {calendar.memberIds.map(userId => {
+                  const user = getUser(userId);
                   const isOwner = userId === calendar.ownerId;
-                  if (!user) return null;
+                  const displayName = user?.name ?? userId;
 
                   return (
                     <View
@@ -238,13 +270,13 @@ export default function CalendarSettingsScreen() {
                     >
                       <View style={[styles.memberAvatar, { backgroundColor: tintColor + '20' }]}>
                         <ThemedText style={[styles.memberAvatarText, { color: tintColor }]}>
-                          {user.name.charAt(0)}
+                          {displayName.charAt(0).toUpperCase()}
                         </ThemedText>
                       </View>
                       <View style={styles.memberInfo}>
-                        <ThemedText type="defaultSemiBold">{user.name}</ThemedText>
+                        <ThemedText type="defaultSemiBold">{displayName}</ThemedText>
                         <ThemedText style={[styles.memberEmail, { color: textSecondary }]}>
-                          {isOwner ? 'Owner' : user.email}
+                          {isOwner ? 'Owner' : (user?.email ?? '')}
                         </ThemedText>
                       </View>
                       {!isOwner && (

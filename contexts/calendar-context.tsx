@@ -47,13 +47,15 @@ interface CalendarContextType {
   createCalendar: (data: CreateCalendarInput) => Promise<Calendar>;
   updateCalendar: (id: string, data: Partial<Calendar>) => Promise<void>;
   deleteCalendar: (id: string) => Promise<void>;
+  addCalendarMember: (calendarId: string, userId: string) => Promise<void>;
+  removeCalendarMember: (calendarId: string, userId: string) => Promise<void>;
   // Event CRUD
   createEvent: (calendarId: string, data: CreateEventInput) => Promise<CalendarEvent>;
   updateEvent: (calendarId: string, eventId: string, data: Partial<CalendarEvent>) => Promise<void>;
   deleteEvent: (calendarId: string, eventId: string) => Promise<void>;
   // Pending items
   refreshPendingItems: () => Promise<void>;
-  acceptPendingItem: (itemId: string, sk?: string) => Promise<void>;
+  acceptPendingItem: (itemId: string, sk?: string, calendarId?: string) => Promise<void>;
   declinePendingItem: (itemId: string, sk?: string) => Promise<void>;
 }
 
@@ -90,6 +92,21 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       // 1. Fetch all calendars
       const rawCalendars = await apiClient.get<Omit<Calendar, 'isVisible'>[]>('calendars');
       if (generation !== loadGenRef.current) return; // stale — a newer call is in flight
+
+      // Backfill: create a Personal calendar for any user who slipped through
+      // without one (e.g. created before the post-confirmation trigger was deployed).
+      if (rawCalendars.length === 0) {
+        try {
+          const created = await apiClient.post<Omit<Calendar, 'isVisible'>>('calendars', {
+            name: 'Personal',
+            color: '#FF8C6B',
+            type: 'personal',
+          });
+          rawCalendars.push(created);
+        } catch {
+          // Non-fatal — user can create one manually
+        }
+      }
 
       const calendarsWithVisibility: Calendar[] = rawCalendars.map(cal => ({
         ...cal,
@@ -250,6 +267,24 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     }
   }, [apiClient, loadData]);
 
+  const addCalendarMember = useCallback(async (calendarId: string, userId: string): Promise<void> => {
+    await apiClient.post(`calendars/${calendarId}/members/${userId}`, {});
+    setCalendars(prev => prev.map(c =>
+      c.id === calendarId && !c.memberIds.includes(userId)
+        ? { ...c, memberIds: [...c.memberIds, userId] }
+        : c
+    ));
+  }, [apiClient]);
+
+  const removeCalendarMember = useCallback(async (calendarId: string, userId: string): Promise<void> => {
+    await apiClient.del(`calendars/${calendarId}/members/${userId}`);
+    setCalendars(prev => prev.map(c =>
+      c.id === calendarId
+        ? { ...c, memberIds: c.memberIds.filter(id => id !== userId) }
+        : c
+    ));
+  }, [apiClient]);
+
   // ── Event mutations ───────────────────────────────────────────────────────
 
   const createEvent = useCallback(async (
@@ -327,13 +362,20 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     }
   }, [apiClient]);
 
-  const acceptPendingItem = useCallback(async (itemId: string, sk?: string) => {
+  const acceptPendingItem = useCallback(async (itemId: string, sk?: string, calendarId?: string) => {
     // Optimistic update
     setPendingItems(prev => prev.map(item =>
       item.id === itemId ? { ...item, status: 'accepted' as const } : item
     ));
     try {
-      await apiClient.post(`pending-items/${itemId}/accept`, { ...(sk ? { sk } : {}) });
+      const body: Record<string, string> = {};
+      if (sk) body.sk = sk;
+      if (calendarId) body.calendarId = calendarId;
+      const result = await apiClient.post<{ createdEvent?: CalendarEvent }>(`pending-items/${itemId}/accept`, body);
+      // If the backend returned a new event copy, add it to local state immediately
+      if (result.createdEvent) {
+        setEvents(prev => [...prev, result.createdEvent!]);
+      }
       await refreshPendingItems();
     } catch (err) {
       await refreshPendingItems(); // revert
@@ -405,6 +447,8 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         refreshPendingItems,
         acceptPendingItem,
         declinePendingItem,
+        addCalendarMember,
+        removeCalendarMember,
       }}
     >
       {children}

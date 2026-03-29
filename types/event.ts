@@ -49,4 +49,11 @@ export interface CalendarEvent {
     }>;
   };
   aiEditedFields?: string[];       // fields user changed after AI pre-fill: ["startTime", "location"]
+
+  // Set when this event was copied from an invitation — points to the original event id
+  linkedEventId?: string;
+
+  // RSVP status per invitee — only populated on the original event (owner's view)
+  // key: userId, value: 'pending' | 'accepted' | 'declined'
+  inviteeStatuses?: Record<string, 'pending' | 'accepted' | 'declined'>;
 }

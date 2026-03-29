@@ -1,5 +1,7 @@
-import { StyleSheet, View, ScrollView, Pressable, Alert } from 'react-native';
+import { StyleSheet, View, ScrollView, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useState, useEffect } from 'react';
+import Constants from 'expo-constants';
 
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
@@ -9,6 +11,7 @@ import { useCalendar } from '@/contexts/calendar-context';
 import { useAuth } from '@/contexts/auth-context';
 import { AuthError } from '@/utils/api-client';
 import { formatDateRange } from '@/utils/date-helpers';
+import type { CalendarEvent } from '@/types';
 
 export default function EventDetailScreen() {
   const router = useRouter();
@@ -16,9 +19,39 @@ export default function EventDetailScreen() {
   const eventId = params.id as string;
 
   const { calendars, events, deleteEvent, getUser } = useCalendar();
-  const { logout, user } = useAuth();
+  const { logout, user, getIdToken } = useAuth();
 
-  const event = events.find(e => e.id === eventId);
+  const localEvent = events.find(e => e.id === eventId);
+  const [fetchedEvent, setFetchedEvent] = useState<CalendarEvent | null>(null);
+  // Start in loading state immediately if we'll need to fetch (avoids "Event not found" flash)
+  const [isFetching, setIsFetching] = useState(!localEvent && !!eventId);
+
+  // If not in local state (e.g. pending invite not yet accepted), fetch from API
+  useEffect(() => {
+    if (localEvent || !eventId) {
+      setIsFetching(false);
+      return;
+    }
+    setIsFetching(true);
+    getIdToken().then(token => {
+      if (!token) throw new Error('No token');
+      const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, string>;
+      const apiUrl = (extra.apiUrl ?? '').replace(/\/$/, '');
+      // Use the invite-specific endpoint — no calendarId required
+      return fetch(`${apiUrl}/pending-items/event/${encodeURIComponent(eventId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    }).then(res => {
+      if (!res || !res.ok) return undefined;
+      return res.json();
+    }).then((data: CalendarEvent | undefined) => {
+      if (data) setFetchedEvent(data);
+    }).catch(() => {
+      // silently fall through to "not found" state
+    }).finally(() => setIsFetching(false));
+  }, [eventId, localEvent, getIdToken]);
+
+  const event = localEvent ?? fetchedEvent;
   const calendar = event ? calendars.find(c => c.id === event.calendarId) : null;
   const isOwner = event && user && event.createdBy === user.id;
 
@@ -28,9 +61,20 @@ export default function EventDetailScreen() {
   const textSecondary = useThemeColor({}, 'textSecondary');
   const dangerColor = useThemeColor({}, 'danger');
 
-  if (!event || !calendar) {
+  if (isFetching) {
     return (
-      <ThemedView style={styles.container}>
+      <ThemedView style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" />
+      </ThemedView>
+    );
+  }
+
+  if (!event) {
+    return (
+      <ThemedView style={[styles.container, styles.centered]}>
+        <Pressable onPress={() => router.back()} style={styles.backButtonAbsolute}>
+          <IconSymbol name="chevron.left" size={28} color={tintColor} />
+        </Pressable>
         <ThemedText>Event not found</ThemedText>
       </ThemedView>
     );
@@ -104,14 +148,20 @@ export default function EventDetailScreen() {
 
         {/* Title with calendar color */}
         <View style={styles.titleSection}>
-          <View style={[styles.colorBar, { backgroundColor: calendar.color }]} />
+          <View style={[styles.colorBar, { backgroundColor: calendar?.color ?? tintColor }]} />
           <View style={styles.titleContent}>
             <ThemedText type="title" style={styles.title}>
               {event.title}
             </ThemedText>
-            <ThemedText style={[styles.calendarName, { color: calendar.color }]}>
-              {calendar.name}
-            </ThemedText>
+            {calendar ? (
+              <ThemedText style={[styles.calendarName, { color: calendar.color }]}>
+                {calendar.name}
+              </ThemedText>
+            ) : (
+              <ThemedText style={[styles.calendarName, { color: textSecondary }]}>
+                Invitation (not yet accepted)
+              </ThemedText>
+            )}
           </View>
         </View>
 
@@ -160,17 +210,27 @@ export default function EventDetailScreen() {
                   Invitees ({event.invitedUserIds?.length ?? 0})
                 </ThemedText>
                 <View style={styles.inviteesList}>
-                  {(event.invitedUserIds ?? []).map(userId => {
-                    const user = getUser(userId);
-                    if (!user) return null;
+                  {(event.invitedUserIds ?? []).map(inviteeId => {
+                    const inviteeUser = getUser(inviteeId);
+                    // Use RSVP status from the event itself (written by accept/decline handlers)
+                    const status = event.inviteeStatuses?.[inviteeId] ?? 'pending';
+                    const statusColor = status === 'accepted' ? '#22c55e' : status === 'declined' ? dangerColor : textSecondary;
+                    const statusLabel = status === 'accepted' ? 'Accepted' : status === 'declined' ? 'Declined' : 'Pending';
                     return (
-                      <View key={userId} style={styles.inviteeRow}>
+                      <View key={inviteeId} style={styles.inviteeRow}>
                         <View style={[styles.inviteeAvatar, { backgroundColor: tintColor + '20' }]}>
                           <ThemedText style={[styles.inviteeAvatarText, { color: tintColor }]}>
-                            {user.name.charAt(0)}
+                            {inviteeUser ? inviteeUser.name.charAt(0) : '?'}
                           </ThemedText>
                         </View>
-                        <ThemedText>{user.name}</ThemedText>
+                        <ThemedText style={styles.inviteeName}>
+                          {inviteeUser?.name ?? inviteeId}
+                        </ThemedText>
+                        <View style={[styles.statusBadge, { backgroundColor: statusColor + '20', borderColor: statusColor }]}>
+                          <ThemedText style={[styles.statusText, { color: statusColor }]}>
+                            {statusLabel}
+                          </ThemedText>
+                        </View>
                       </View>
                     );
                   })}
@@ -258,6 +318,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  centered: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backButtonAbsolute: {
+    position: 'absolute',
+    top: 60,
+    left: 16,
+    padding: 4,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -335,6 +405,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  inviteeName: {
+    flex: 1,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   inviteeAvatar: {
     width: 32,

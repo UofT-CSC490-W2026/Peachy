@@ -116,8 +116,8 @@ export default function EventCreateScreen() {
     const aiEditedFields: string[] = [];
     if (isAIGenerated) {
       if (title.trim() !== aiOriginalValues.title) aiEditedFields.push('title');
-      if (startDate.toISOString() !== aiOriginalValues.startTime) aiEditedFields.push('startTime');
-      if (endDate.toISOString() !== aiOriginalValues.endTime) aiEditedFields.push('endTime');
+      if (startDate.getTime() !== new Date(aiOriginalValues.startTime).getTime()) aiEditedFields.push('startTime');
+      if (endDate.getTime() !== new Date(aiOriginalValues.endTime).getTime()) aiEditedFields.push('endTime');
       if (location.trim() !== aiOriginalValues.location) aiEditedFields.push('location');
       if (isAllDay !== aiOriginalValues.isAllDay) aiEditedFields.push('isAllDay');
       if (invitedUserIds.join(',') !== aiOriginalValues.inviteeIds) aiEditedFields.push('invitedUserIds');

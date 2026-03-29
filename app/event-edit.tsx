@@ -221,15 +221,23 @@ export default function EventEditScreen() {
             <IconSymbol name="chevron.right" size={16} color={tintColor} />
           </Pressable>
 
-          {/* Show invited users */}
+          {/* Show invited users with RSVP status */}
           {invitedUserIds.length > 0 && (
             <View style={styles.inviteesList}>
               {invitedUserIds.map(userId => {
-                const user = getUser(userId);
-                if (!user) return null;
+                const inviteeUser = getUser(userId);
+                if (!inviteeUser) return null;
+                const status = event.inviteeStatuses?.[userId] ?? 'pending';
+                const statusColor = status === 'accepted' ? '#22c55e' : status === 'declined' ? '#ef4444' : '#9BA1A6';
+                const statusLabel = status === 'accepted' ? 'Accepted' : status === 'declined' ? 'Declined' : 'Pending';
                 return (
                   <View key={userId} style={[styles.inviteeChip, { backgroundColor: surfaceColor, borderColor }]}>
-                    <ThemedText style={styles.inviteeChipText}>{user.name}</ThemedText>
+                    <View style={styles.inviteeChipInfo}>
+                      <ThemedText style={styles.inviteeChipText}>{inviteeUser.name}</ThemedText>
+                      <View style={[styles.statusBadge, { backgroundColor: statusColor + '20', borderColor: statusColor }]}>
+                        <ThemedText style={[styles.statusText, { color: statusColor }]}>{statusLabel}</ThemedText>
+                      </View>
+                    </View>
                     <Pressable
                       onPress={() => setInvitedUserIds(invitedUserIds.filter(id => id !== userId))}
                       hitSlop={8}
@@ -421,6 +429,23 @@ const styles = StyleSheet.create({
   },
   inviteeChipText: {
     fontSize: 14,
+  },
+  inviteeChipInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  statusBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   errorContainer: {
     flex: 1,
