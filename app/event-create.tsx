@@ -16,12 +16,10 @@ import { useCalendar } from '@/contexts/calendar-context';
 import { useAuth } from '@/contexts/auth-context';
 import { AuthError } from '@/utils/api-client';
 import { getSlotIndex } from '@/utils/rl-helpers';
-import { contacts } from '@/data/mock-data';
-
 export default function EventCreateScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { calendars, createEvent } = useCalendar();
+  const { calendars, createEvent, getUser, fetchUser } = useCalendar();
   const { user, getIdToken, logout } = useAuth();
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');
@@ -55,6 +53,7 @@ export default function EventCreateScreen() {
   const [location, setLocation] = useState(params.location as string || '');
   const [description, setDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [inviteeDisplayNames, setInviteeDisplayNames] = useState<Record<string, string>>({});
   const [invitedUserIds, setInvitedUserIds] = useState<string[]>(() => {
     if (params.inviteeIds) {
       const ids = (params.inviteeIds as string).split(',').filter(id => id.trim());
@@ -79,6 +78,17 @@ export default function EventCreateScreen() {
       setSelectedCalendar(calendars[0]);
     }
   }, [calendars, selectedCalendar]);
+
+  // Fetch display names for invitees not already in the user cache
+  useEffect(() => {
+    invitedUserIds.forEach(uid => {
+      if (!getUser(uid)) {
+        fetchUser(uid).then(u => {
+          if (u) setInviteeDisplayNames(prev => ({ ...prev, [uid]: u.name }));
+        });
+      }
+    });
+  }, [invitedUserIds, fetchUser, getUser]);
 
   // Handle return from user search
   useEffect(() => {
@@ -275,11 +285,10 @@ export default function EventCreateScreen() {
           {invitedUserIds.length > 0 && (
             <View style={styles.inviteesList}>
               {invitedUserIds.map(userId => {
-                const user = contacts.find(c => c.id === userId);
-                if (!user) return null;
+                const displayName = getUser(userId)?.name ?? inviteeDisplayNames[userId] ?? userId;
                 return (
                   <View key={userId} style={[styles.inviteeChip, { backgroundColor: surfaceColor, borderColor }]}>
-                    <ThemedText style={styles.inviteeChipText}>{user.name}</ThemedText>
+                    <ThemedText style={styles.inviteeChipText}>{displayName}</ThemedText>
                     <Pressable
                       onPress={() => setInvitedUserIds(invitedUserIds.filter(id => id !== userId))}
                       hitSlop={8}

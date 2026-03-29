@@ -18,7 +18,7 @@ export default function EventDetailScreen() {
   const params = useLocalSearchParams();
   const eventId = params.id as string;
 
-  const { calendars, events, deleteEvent, getUser, fetchUser } = useCalendar();
+  const { calendars, events, pendingItems, deleteEvent, getUser, fetchUser } = useCalendar();
   const { logout, user, getIdToken } = useAuth();
 
   const localEvent = events.find(e => e.id === eventId);
@@ -69,6 +69,19 @@ export default function EventDetailScreen() {
   }, [event?.invitedUserIds, event?.originalCreatedBy, fetchUser, getUser]);
   const calendar = event ? calendars.find(c => c.id === event.calendarId) : null;
   const isOwner = event && user && event.createdBy === user.id && !event.linkedEventId;
+
+  // Derive RSVP status for the current user on linked (invited) event copies
+  const myRsvpStatus: 'accepted' | 'declined' | 'pending' | null =
+    event?.linkedEventId && user
+      ? (() => {
+          const myPending = pendingItems.find(
+            p => p.type === 'event_invite' && p.eventId === event.linkedEventId
+          );
+          if (myPending) return myPending.status === 'declined' ? 'declined' : 'pending';
+          // No pending item + linked event present = accepted
+          return 'accepted';
+        })()
+      : null;
 
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');
@@ -161,6 +174,20 @@ export default function EventDetailScreen() {
           </View>
         )}
 
+        {/* RSVP status badge */}
+        {myRsvpStatus !== null && (() => {
+          const rsvpColor = myRsvpStatus === 'accepted' ? '#22c55e' : myRsvpStatus === 'declined' ? dangerColor : textSecondary;
+          const rsvpLabel = myRsvpStatus === 'accepted' ? 'Accepted' : myRsvpStatus === 'declined' ? 'Declined' : 'Pending';
+          return (
+            <View style={[styles.aiBadge, { backgroundColor: rsvpColor + '15', borderColor: rsvpColor + '40' }]}>
+              <IconSymbol name="checkmark.circle.fill" size={14} color={rsvpColor} />
+              <ThemedText style={[styles.aiText, { color: rsvpColor }]}>
+                Your RSVP: {rsvpLabel}
+              </ThemedText>
+            </View>
+          );
+        })()}
+
         {/* AI Attribution Badge */}
         {event.aiGenerated && event.aiInput && (
           <View style={[styles.aiBadge, { backgroundColor: tintColor + '10', borderColor: borderColor }]}>
@@ -226,22 +253,28 @@ export default function EventDetailScreen() {
         )}
 
         {/* Organizer — shown on linked copies so invitees know who created the event */}
-        {event.originalCreatedBy && (
+        {(event.originalCreatedBy || event.linkedEventId) && (
           <View style={[styles.section, { backgroundColor: surfaceColor, borderColor }]}>
             <View style={styles.sectionRow}>
               <IconSymbol name="person.fill" size={24} color={tintColor} />
               <View style={styles.sectionContent}>
                 <ThemedText type="defaultSemiBold">Organizer</ThemedText>
-                <View style={styles.inviteeRow}>
-                  <View style={[styles.inviteeAvatar, { backgroundColor: tintColor + '20' }]}>
-                    <ThemedText style={[styles.inviteeAvatarText, { color: tintColor }]}>
-                      {(getUser(event.originalCreatedBy)?.name ?? inviteeNames[event.originalCreatedBy] ?? '?').charAt(0).toUpperCase()}
+                {event.originalCreatedBy ? (
+                  <View style={styles.inviteeRow}>
+                    <View style={[styles.inviteeAvatar, { backgroundColor: tintColor + '20' }]}>
+                      <ThemedText style={[styles.inviteeAvatarText, { color: tintColor }]}>
+                        {(getUser(event.originalCreatedBy)?.name ?? inviteeNames[event.originalCreatedBy] ?? '?').charAt(0).toUpperCase()}
+                      </ThemedText>
+                    </View>
+                    <ThemedText style={styles.inviteeName}>
+                      {getUser(event.originalCreatedBy)?.name ?? inviteeNames[event.originalCreatedBy] ?? event.originalCreatedBy}
                     </ThemedText>
                   </View>
-                  <ThemedText style={styles.inviteeName}>
-                    {getUser(event.originalCreatedBy)?.name ?? inviteeNames[event.originalCreatedBy] ?? event.originalCreatedBy}
+                ) : (
+                  <ThemedText style={[styles.sectionSubtext, { color: textSecondary }]}>
+                    Organizer unknown
                   </ThemedText>
-                </View>
+                )}
               </View>
             </View>
           </View>

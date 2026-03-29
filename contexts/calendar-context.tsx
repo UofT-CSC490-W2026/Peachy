@@ -389,17 +389,25 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   }, [apiClient, refreshPendingItems]);
 
   const declinePendingItem = useCallback(async (itemId: string, sk?: string) => {
-    setPendingItems(prev => prev.map(item =>
-      item.id === itemId ? { ...item, status: 'declined' as const } : item
+    // Capture the linked eventId before the optimistic update
+    const item = pendingItems.find(p => p.id === itemId);
+    const linkedEventId = item?.eventId;
+
+    setPendingItems(prev => prev.map(p =>
+      p.id === itemId ? { ...p, status: 'declined' as const } : p
     ));
     try {
       await apiClient.post(`pending-items/${itemId}/decline`, { ...(sk ? { sk } : {}) });
+      // Remove the invitee's linked event copy from local state
+      if (linkedEventId) {
+        setEvents(prev => prev.filter(e => e.linkedEventId !== linkedEventId));
+      }
       await refreshPendingItems();
     } catch (err) {
       await refreshPendingItems();
       throw err;
     }
-  }, [apiClient, refreshPendingItems]);
+  }, [apiClient, pendingItems, refreshPendingItems]);
 
   // ── User lookup (cached, with current user from auth) ────────────────────
 

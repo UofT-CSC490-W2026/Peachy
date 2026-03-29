@@ -55,6 +55,8 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
   // Helper to get display info from referenced entities
   const getDisplayInfo = (item: PendingItem) => {
     if (item.type === 'event_invite' && item.eventId) {
+      const sender = getUser(item.fromUserId);
+      const senderName = sender?.name ?? 'Someone';
       const event = events.find(e => e.id === item.eventId);
       if (event) {
         const eventDate = new Date(event.startTime);
@@ -64,13 +66,16 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
           month: 'short',
           day: 'numeric'
         });
-        const sender = getUser(item.fromUserId);
-        const senderName = sender ? sender.name : 'Someone';
         return {
           title: 'Event Invitation',
           description: `${senderName} invited you to "${event.title}" • ${dateStr} at ${timeStr}`,
         };
       }
+      // Event not yet in local state (not yet accepted) — show sender name as fallback
+      return {
+        title: 'Event Invitation',
+        description: `${senderName} invited you to an event • Tap to view details`,
+      };
     } else if (item.type === 'calendar_invite' && item.calendarId) {
       const calendar = calendars.find(c => c.id === item.calendarId);
       const sender = getUser(item.fromUserId);
