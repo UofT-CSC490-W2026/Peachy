@@ -23,7 +23,7 @@ interface SearchUser {
 export default function UserSearchScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const mode = params.mode as string || 'chat'; // 'chat', 'event', or 'friend'
+  const mode = params.mode as string || 'chat'; // 'chat', 'event', 'calendar', or 'friend'
 
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');
@@ -107,7 +107,7 @@ export default function UserSearchScreen() {
       return;
     }
 
-    if (mode === 'event') {
+    if (mode === 'event' || mode === 'calendar') {
       router.back();
       setTimeout(() => {
         router.setParams({ selectedUsers: JSON.stringify(selectedUsers) });
@@ -234,6 +234,7 @@ export default function UserSearchScreen() {
 
   const getTitle = () => {
     switch (mode) {
+      case 'calendar': return 'Add Members';
       case 'friend': return 'Add Friend';
       case 'chat': return 'New Message';
       default: return 'Add People';
