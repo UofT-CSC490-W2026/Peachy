@@ -362,17 +362,17 @@ Add member to calendar (invite).
 
 **Request:**
 ```typescript
-{
-  userId: string;
-}
+// userId is passed as a path parameter:
+// POST /calendars/:calendarId/members/:userId
 ```
 
 **Response:** `200 OK`
 ```typescript
 {
-  calendar: Calendar;
-  members: User[];
-  pendingItem: PendingItem;  // Created invitation
+  calendarId: string;
+  userId: string;
+  role: "member";
+  addedAt: string;
 }
 ```
 
@@ -382,9 +382,9 @@ Add member to calendar (invite).
 - `409` - User already a member
 
 **Notes:**
-- Creates pending item (calendar_invite) for invited user
-- User must accept invitation to join
-- Once accepted, automatically added to calendar group chat
+- Member is added immediately (no pending calendar_invite acceptance flow)
+- Adds new member to calendar group chat when a group chat exists
+- Sends push notification to the added member
 
 ---
 
@@ -920,9 +920,8 @@ Accept pending invitation.
 **Side Effects by Type:**
 
 **calendar_invite:**
-- Adds user to calendar members
-- Adds user to calendar group chat
-- Triggers `onCalendarUpdate` subscription
+- Not currently implemented in pending accept flow.
+- Calendar membership is currently managed directly via `POST /calendars/:calendarId/members` (owner adds member immediately).
 
 **event_invite:**
 - Updates inviteStatus in chat messages (eventId match)
@@ -947,7 +946,7 @@ Decline pending invitation.
 **Side Effects by Type:**
 
 **calendar_invite:**
-- No action (user not added to calendar)
+- Not currently implemented in pending decline flow.
 
 **event_invite:**
 - Updates inviteStatus in chat messages (eventId match)
