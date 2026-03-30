@@ -1,5 +1,5 @@
-import { StyleSheet, View, Pressable, ScrollView, Alert } from 'react-native';
-import { useMemo } from 'react';
+import { StyleSheet, View, Pressable, ScrollView, Alert, RefreshControl } from 'react-native';
+import { useMemo, useState, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
@@ -11,7 +11,8 @@ import { PendingItems } from '@/components/pending-items';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { calendars, visibleEvents, pendingItems, acceptPendingItem, declinePendingItem } = useCalendar();
+  const { calendars, visibleEvents, pendingItems, acceptPendingItem, declinePendingItem, refreshCalendars, refreshPendingItems } = useCalendar();
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const tintColor = useThemeColor({}, 'tint');
   const borderColor = useThemeColor({}, 'border');
   const surfaceColor = useThemeColor({}, 'surface');
@@ -19,17 +20,25 @@ export default function HomeScreen() {
   // All items fetched are already 'pending' status — no need to filter
   const displayedPendingItems = useMemo(() => pendingItems, [pendingItems]);
 
-  const handleAccept = async (itemId: string) => {
+  const handleAccept = async (itemId: string, calendarId?: string) => {
     const item = pendingItems.find(i => i.id === itemId);
     if (!item) return;
 
     try {
-      await acceptPendingItem(itemId, (item as any).sk);
-      Alert.alert('Success', 'Invitation accepted');
+      await acceptPendingItem(itemId, item.sk, calendarId);
     } catch {
       Alert.alert('Error', 'Failed to accept invitation. Please try again.');
     }
   };
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([refreshCalendars(), refreshPendingItems()]);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refreshCalendars, refreshPendingItems]);
 
   const handleDecline = async (itemId: string) => {
     const item = pendingItems.find(i => i.id === itemId);
@@ -37,7 +46,6 @@ export default function HomeScreen() {
 
     try {
       await declinePendingItem(itemId, (item as any).sk);
-      Alert.alert('Declined', 'Invitation declined');
     } catch {
       Alert.alert('Error', 'Failed to decline invitation. Please try again.');
     }
@@ -57,7 +65,13 @@ export default function HomeScreen() {
       </View>
 
       {/* Scrollable content */}
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={tintColor} />
+        }
+      >
         {/* Pending items */}
         <PendingItems
           items={displayedPendingItems}

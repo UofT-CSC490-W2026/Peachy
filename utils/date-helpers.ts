@@ -210,6 +210,20 @@ export function getEventsThisWeek(events: CalendarEvent[]): CalendarEvent[] {
 }
 
 /**
+ * Get all future events starting from the day after tomorrow, sorted by start time
+ */
+export function getFutureEvents(events: CalendarEvent[]): CalendarEvent[] {
+  const dayAfterTomorrow = new Date();
+  dayAfterTomorrow.setHours(0, 0, 0, 0);
+  dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2);
+
+  return events.filter(event => {
+    const startTime = new Date(event.startTime);
+    return startTime >= dayAfterTomorrow;
+  }).sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+}
+
+/**
  * Format date section header ("Today", "Tomorrow", or "Wed, Feb 14")
  */
 export function formatDateSectionHeader(date: Date): string {

@@ -140,7 +140,22 @@ export default function ChatDetailScreen() {
     const prevMessage = index > 0 ? messages[index - 1] : null;
     const showHeader = !prevMessage || prevMessage.senderId !== item.senderId;
     const isEventInvite = item.type === 'event_invite';
+    const isEventUpdate = item.type === 'event_update';
     const inviteStatus = item.inviteStatus || 'pending';
+
+    if (isEventUpdate) {
+      return (
+        <Pressable
+          style={styles.systemMessageContainer}
+          onPress={() => item.eventId && handleViewEvent(item.eventId)}
+        >
+          <IconSymbol name="repeat" size={13} color={textSecondary} />
+          <ThemedText style={[styles.systemMessageText, { color: textSecondary }]}>
+            {item.content}
+          </ThemedText>
+        </Pressable>
+      );
+    }
 
     if (isEventInvite) {
       return (
@@ -405,6 +420,19 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 12,
     paddingHorizontal: 16,
+  },
+  systemMessageContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    marginVertical: 2,
+  },
+  systemMessageText: {
+    fontSize: 12,
+    textAlign: 'center',
   },
   eventInviteCard: {
     borderRadius: 12,

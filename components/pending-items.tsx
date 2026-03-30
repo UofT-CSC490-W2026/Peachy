@@ -1,4 +1,5 @@
-import { StyleSheet, View, Pressable, Alert } from 'react-native';
+import { StyleSheet, View, Pressable, Alert, Modal, ScrollView } from 'react-native';
+import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -9,7 +10,7 @@ import { formatTime } from '@/utils/date-helpers';
 
 interface PendingItemsProps {
   items: PendingItem[];
-  onAccept: (itemId: string) => void;
+  onAccept: (itemId: string, calendarId?: string) => void;
   onDecline: (itemId: string) => void;
 }
 
@@ -21,6 +22,7 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
   const textSecondary = useThemeColor({}, 'textSecondary');
   const tintColor = useThemeColor({}, 'tint');
   const dangerColor = useThemeColor({}, 'danger');
+  const [calendarPickerItem, setCalendarPickerItem] = useState<PendingItem | null>(null);
 
   if (items.length === 0) {
     return null;
@@ -53,6 +55,8 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
   // Helper to get display info from referenced entities
   const getDisplayInfo = (item: PendingItem) => {
     if (item.type === 'event_invite' && item.eventId) {
+      const sender = getUser(item.fromUserId);
+      const senderName = sender?.name ?? 'Someone';
       const event = events.find(e => e.id === item.eventId);
       if (event) {
         const eventDate = new Date(event.startTime);
@@ -64,9 +68,14 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
         });
         return {
           title: 'Event Invitation',
-          description: `${event.title} • ${dateStr} at ${timeStr}`,
+          description: `${senderName} invited you to "${event.title}" • ${dateStr} at ${timeStr}`,
         };
       }
+      // Event not yet in local state (not yet accepted) — show sender name as fallback
+      return {
+        title: 'Event Invitation',
+        description: `${senderName} invited you to an event • Tap to view details`,
+      };
     } else if (item.type === 'calendar_invite' && item.calendarId) {
       const calendar = calendars.find(c => c.id === item.calendarId);
       const sender = getUser(item.fromUserId);
@@ -79,9 +88,16 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
     } else if (item.type === 'event_update' && item.eventId) {
       const event = events.find(e => e.id === item.eventId);
       if (event) {
+        const sender = getUser(item.fromUserId);
+        const senderName = sender ? sender.name : 'The organizer';
+        const eventDate = new Date(event.startTime);
+        const timeStr = event.isAllDay ? 'All day' : formatTime(eventDate);
+        const dateStr = eventDate.toLocaleDateString('en-US', {
+          weekday: 'short', month: 'short', day: 'numeric',
+        });
         return {
           title: 'Event Updated',
-          description: `"${event.title}" has been updated`,
+          description: `${senderName} updated "${event.title}" — now ${dateStr} at ${timeStr}`,
         };
       }
     }
@@ -101,27 +117,19 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
   };
 
   const handleAccept = (item: PendingItem) => {
-    const { title } = getDisplayInfo(item);
-    Alert.alert(
-      'Accept',
-      `Accept "${title}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Accept', onPress: () => onAccept(item.id) },
-      ]
-    );
+    if (item.type === 'event_invite') {
+      if (calendars.length === 0) {
+        Alert.alert('No Calendars', 'Create a calendar first before accepting event invitations.');
+        return;
+      }
+      setCalendarPickerItem(item);
+    } else {
+      onAccept(item.id);
+    }
   };
 
   const handleDecline = (item: PendingItem) => {
-    const { title } = getDisplayInfo(item);
-    Alert.alert(
-      'Decline',
-      `Decline "${title}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Decline', style: 'destructive', onPress: () => onDecline(item.id) },
-      ]
-    );
+    onDecline(item.id);
   };
 
   return (
@@ -134,6 +142,9 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
         const HeaderWrapper = isEventInvite ? Pressable : View;
         const { title, description } = getDisplayInfo(item);
 
+        const isEventUpdate = item.type === 'event_update';
+        const isTappable = isEventInvite || isEventUpdate;
+
         return (
           <View
             key={item.id}
@@ -141,7 +152,7 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
           >
             <HeaderWrapper
               style={styles.header}
-              onPress={isEventInvite ? () => handleViewEventDetail(item) : undefined}
+              onPress={isTappable ? () => handleViewEventDetail(item) : undefined}
             >
               <View style={styles.iconContainer}>
                 <IconSymbol
@@ -153,7 +164,7 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
               <View style={styles.content}>
                 <ThemedText type="defaultSemiBold" style={styles.title}>
                   {title}
-                  {isEventInvite && (
+                  {isTappable && (
                     <ThemedText style={[styles.viewDetail, { color: tintColor }]}>
                       {' '}• Tap to view
                     </ThemedText>
@@ -167,27 +178,86 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
                 </ThemedText>
               </View>
             </HeaderWrapper>
-          <View style={styles.actions}>
-            <Pressable
-              style={[styles.button, styles.declineButton, { borderColor: dangerColor }]}
-              onPress={() => handleDecline(item)}
-            >
-              <ThemedText style={[styles.buttonText, { color: dangerColor }]}>
-                Decline
-              </ThemedText>
-            </Pressable>
-            <Pressable
-              style={[styles.button, styles.acceptButton, { backgroundColor: tintColor }]}
-              onPress={() => handleAccept(item)}
-            >
-              <ThemedText style={[styles.buttonText, styles.acceptButtonText]}>
-                Accept
-              </ThemedText>
-            </Pressable>
-          </View>
+            {isEventUpdate ? (
+              // Update notifications only need a dismiss action — no accept/decline
+              <View style={styles.actions}>
+                <Pressable
+                  style={[styles.button, styles.acceptButton, { backgroundColor: tintColor }]}
+                  onPress={() => onDecline(item.id)}
+                >
+                  <ThemedText style={[styles.buttonText, styles.acceptButtonText]}>
+                    Dismiss
+                  </ThemedText>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.actions}>
+                <Pressable
+                  style={[styles.button, styles.declineButton, { borderColor: dangerColor }]}
+                  onPress={() => handleDecline(item)}
+                >
+                  <ThemedText style={[styles.buttonText, { color: dangerColor }]}>
+                    Decline
+                  </ThemedText>
+                </Pressable>
+                <Pressable
+                  style={[styles.button, styles.acceptButton, { backgroundColor: tintColor }]}
+                  onPress={() => handleAccept(item)}
+                >
+                  <ThemedText style={[styles.buttonText, styles.acceptButtonText]}>
+                    Accept
+                  </ThemedText>
+                </Pressable>
+              </View>
+            )}
         </View>
         );
       })}
+      {/* Calendar Picker Bottom Sheet */}
+      <Modal
+        visible={calendarPickerItem !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCalendarPickerItem(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setCalendarPickerItem(null)} />
+          <View style={[styles.modalContent, { backgroundColor: surfaceColor }]}>
+            <View style={styles.modalHeader}>
+              <ThemedText type="subtitle">Add to Calendar</ThemedText>
+              <Pressable onPress={() => setCalendarPickerItem(null)}>
+                <IconSymbol name="xmark" size={24} color={tintColor} />
+              </Pressable>
+            </View>
+            <ThemedText style={[styles.modalSubtitle, { color: textSecondary }]}>
+              Choose which calendar to add this event to
+            </ThemedText>
+            <ScrollView style={styles.calendarList}>
+              {calendars.map(cal => (
+                <Pressable
+                  key={cal.id}
+                  style={[styles.calendarItem, { borderBottomColor: borderColor }]}
+                  onPress={() => {
+                    if (calendarPickerItem) {
+                      onAccept(calendarPickerItem.id, cal.id);
+                      setCalendarPickerItem(null);
+                    }
+                  }}
+                >
+                  <View style={[styles.calendarColorDot, { backgroundColor: cal.color }]} />
+                  <View style={styles.calendarText}>
+                    <ThemedText type="defaultSemiBold">{cal.name}</ThemedText>
+                    <ThemedText style={[styles.calendarType, { color: textSecondary }]}>
+                      {cal.type === 'personal' ? 'Personal' : 'Shared'}
+                    </ThemedText>
+                  </View>
+                  <IconSymbol name="chevron.right" size={18} color={textSecondary} />
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -260,5 +330,58 @@ const styles = StyleSheet.create({
   },
   acceptButtonText: {
     color: '#FFFFFF',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '70%',
+    paddingBottom: 40,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    paddingBottom: 4,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+  },
+  calendarList: {
+    maxHeight: 400,
+  },
+  calendarItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    gap: 12,
+  },
+  calendarColorDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+  },
+  calendarText: {
+    flex: 1,
+  },
+  calendarType: {
+    fontSize: 13,
+    marginTop: 2,
   },
 });

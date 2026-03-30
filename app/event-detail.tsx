@@ -1,5 +1,7 @@
-import { StyleSheet, View, ScrollView, Pressable, Alert } from 'react-native';
+import { StyleSheet, View, ScrollView, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useState, useEffect } from 'react';
+import Constants from 'expo-constants';
 
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
@@ -9,18 +11,77 @@ import { useCalendar } from '@/contexts/calendar-context';
 import { useAuth } from '@/contexts/auth-context';
 import { AuthError } from '@/utils/api-client';
 import { formatDateRange } from '@/utils/date-helpers';
+import type { CalendarEvent } from '@/types';
 
 export default function EventDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const eventId = params.id as string;
 
-  const { calendars, events, deleteEvent, getUser } = useCalendar();
-  const { logout, user } = useAuth();
+  const { calendars, events, pendingItems, deleteEvent, getUser, fetchUser } = useCalendar();
+  const { logout, user, getIdToken } = useAuth();
 
-  const event = events.find(e => e.id === eventId);
+  const localEvent = events.find(e => e.id === eventId);
+  const [fetchedEvent, setFetchedEvent] = useState<CalendarEvent | null>(null);
+  // Start in loading state immediately if we'll need to fetch (avoids "Event not found" flash)
+  const [isFetching, setIsFetching] = useState(!localEvent && !!eventId);
+  const [inviteeNames, setInviteeNames] = useState<Record<string, string>>({});
+
+  // If not in local state (e.g. pending invite not yet accepted), fetch from API
+  useEffect(() => {
+    if (localEvent || !eventId) {
+      setIsFetching(false);
+      return;
+    }
+    setIsFetching(true);
+    getIdToken().then(token => {
+      if (!token) throw new Error('No token');
+      const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, string>;
+      const apiUrl = (extra.apiUrl ?? '').replace(/\/$/, '');
+      // Use the invite-specific endpoint — no calendarId required
+      return fetch(`${apiUrl}/pending-items/event/${encodeURIComponent(eventId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    }).then(res => {
+      if (!res || !res.ok) return undefined;
+      return res.json();
+    }).then((data: CalendarEvent | undefined) => {
+      if (data) setFetchedEvent(data);
+    }).catch(() => {
+      // silently fall through to "not found" state
+    }).finally(() => setIsFetching(false));
+  }, [eventId, localEvent, getIdToken]);
+
+  const event = localEvent ?? fetchedEvent;
+
+  // Fetch display names for invitees and organizer (linked events) not already in the user cache
+  useEffect(() => {
+    const idsToFetch = new Set(event?.invitedUserIds ?? []);
+    if (event?.originalCreatedBy) idsToFetch.add(event.originalCreatedBy);
+    if (idsToFetch.size === 0) return;
+    idsToFetch.forEach(uid => {
+      if (!getUser(uid)) {
+        fetchUser(uid).then(u => {
+          if (u) setInviteeNames(prev => ({ ...prev, [uid]: u.name }));
+        });
+      }
+    });
+  }, [event?.invitedUserIds, event?.originalCreatedBy, fetchUser, getUser]);
   const calendar = event ? calendars.find(c => c.id === event.calendarId) : null;
-  const isOwner = event && user && event.createdBy === user.id;
+  const isOwner = event && user && event.createdBy === user.id && !event.linkedEventId;
+
+  // Derive RSVP status for the current user on linked (invited) event copies
+  const myRsvpStatus: 'accepted' | 'declined' | 'pending' | null =
+    event?.linkedEventId && user
+      ? (() => {
+          const myPending = pendingItems.find(
+            p => p.type === 'event_invite' && p.eventId === event.linkedEventId
+          );
+          if (myPending) return myPending.status === 'declined' ? 'declined' : 'pending';
+          // No pending item + linked event present = accepted
+          return 'accepted';
+        })()
+      : null;
 
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');
@@ -28,9 +89,20 @@ export default function EventDetailScreen() {
   const textSecondary = useThemeColor({}, 'textSecondary');
   const dangerColor = useThemeColor({}, 'danger');
 
-  if (!event || !calendar) {
+  if (isFetching) {
     return (
-      <ThemedView style={styles.container}>
+      <ThemedView style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" />
+      </ThemedView>
+    );
+  }
+
+  if (!event) {
+    return (
+      <ThemedView style={[styles.container, styles.centered]}>
+        <Pressable onPress={() => router.back()} style={styles.backButtonAbsolute}>
+          <IconSymbol name="chevron.left" size={28} color={tintColor} />
+        </Pressable>
         <ThemedText>Event not found</ThemedText>
       </ThemedView>
     );
@@ -92,6 +164,30 @@ export default function EventDetailScreen() {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+        {/* Invited badge */}
+        {event.linkedEventId && (
+          <View style={[styles.aiBadge, { backgroundColor: tintColor + '10', borderColor: borderColor }]}>
+            <IconSymbol name="person.2" size={14} color={textSecondary} />
+            <ThemedText style={[styles.aiText, { color: textSecondary }]}>
+              You were invited to this event
+            </ThemedText>
+          </View>
+        )}
+
+        {/* RSVP status badge */}
+        {myRsvpStatus !== null && (() => {
+          const rsvpColor = myRsvpStatus === 'accepted' ? '#22c55e' : myRsvpStatus === 'declined' ? dangerColor : textSecondary;
+          const rsvpLabel = myRsvpStatus === 'accepted' ? 'Accepted' : myRsvpStatus === 'declined' ? 'Declined' : 'Pending';
+          return (
+            <View style={[styles.aiBadge, { backgroundColor: rsvpColor + '15', borderColor: rsvpColor + '40' }]}>
+              <IconSymbol name="checkmark.circle.fill" size={14} color={rsvpColor} />
+              <ThemedText style={[styles.aiText, { color: rsvpColor }]}>
+                Your RSVP: {rsvpLabel}
+              </ThemedText>
+            </View>
+          );
+        })()}
+
         {/* AI Attribution Badge */}
         {event.aiGenerated && event.aiInput && (
           <View style={[styles.aiBadge, { backgroundColor: tintColor + '10', borderColor: borderColor }]}>
@@ -104,14 +200,20 @@ export default function EventDetailScreen() {
 
         {/* Title with calendar color */}
         <View style={styles.titleSection}>
-          <View style={[styles.colorBar, { backgroundColor: calendar.color }]} />
+          <View style={[styles.colorBar, { backgroundColor: calendar?.color ?? tintColor }]} />
           <View style={styles.titleContent}>
             <ThemedText type="title" style={styles.title}>
               {event.title}
             </ThemedText>
-            <ThemedText style={[styles.calendarName, { color: calendar.color }]}>
-              {calendar.name}
-            </ThemedText>
+            {calendar ? (
+              <ThemedText style={[styles.calendarName, { color: calendar.color }]}>
+                {calendar.name}
+              </ThemedText>
+            ) : (
+              <ThemedText style={[styles.calendarName, { color: textSecondary }]}>
+                Invitation (not yet accepted)
+              </ThemedText>
+            )}
           </View>
         </View>
 
@@ -150,6 +252,34 @@ export default function EventDetailScreen() {
           </View>
         )}
 
+        {/* Organizer — shown on linked copies so invitees know who created the event */}
+        {(event.originalCreatedBy || event.linkedEventId) && (
+          <View style={[styles.section, { backgroundColor: surfaceColor, borderColor }]}>
+            <View style={styles.sectionRow}>
+              <IconSymbol name="person.fill" size={24} color={tintColor} />
+              <View style={styles.sectionContent}>
+                <ThemedText type="defaultSemiBold">Organizer</ThemedText>
+                {event.originalCreatedBy ? (
+                  <View style={styles.inviteeRow}>
+                    <View style={[styles.inviteeAvatar, { backgroundColor: tintColor + '20' }]}>
+                      <ThemedText style={[styles.inviteeAvatarText, { color: tintColor }]}>
+                        {(getUser(event.originalCreatedBy)?.name ?? inviteeNames[event.originalCreatedBy] ?? '?').charAt(0).toUpperCase()}
+                      </ThemedText>
+                    </View>
+                    <ThemedText style={styles.inviteeName}>
+                      {getUser(event.originalCreatedBy)?.name ?? inviteeNames[event.originalCreatedBy] ?? event.originalCreatedBy}
+                    </ThemedText>
+                  </View>
+                ) : (
+                  <ThemedText style={[styles.sectionSubtext, { color: textSecondary }]}>
+                    Organizer unknown
+                  </ThemedText>
+                )}
+              </View>
+            </View>
+          </View>
+        )}
+
         {/* Invitees */}
         {(event.invitedUserIds?.length ?? 0) > 0 && (
           <View style={[styles.section, { backgroundColor: surfaceColor, borderColor }]}>
@@ -160,17 +290,27 @@ export default function EventDetailScreen() {
                   Invitees ({event.invitedUserIds?.length ?? 0})
                 </ThemedText>
                 <View style={styles.inviteesList}>
-                  {(event.invitedUserIds ?? []).map(userId => {
-                    const user = getUser(userId);
-                    if (!user) return null;
+                  {(event.invitedUserIds ?? []).map(inviteeId => {
+                    const inviteeUser = getUser(inviteeId);
+                    // Use RSVP status from the event itself (written by accept/decline handlers)
+                    const status = event.inviteeStatuses?.[inviteeId] ?? 'pending';
+                    const statusColor = status === 'accepted' ? '#22c55e' : status === 'declined' ? dangerColor : textSecondary;
+                    const statusLabel = status === 'accepted' ? 'Accepted' : status === 'declined' ? 'Declined' : 'Pending';
                     return (
-                      <View key={userId} style={styles.inviteeRow}>
+                      <View key={inviteeId} style={styles.inviteeRow}>
                         <View style={[styles.inviteeAvatar, { backgroundColor: tintColor + '20' }]}>
                           <ThemedText style={[styles.inviteeAvatarText, { color: tintColor }]}>
-                            {user.name.charAt(0)}
+                            {(inviteeUser?.name ?? inviteeNames[inviteeId] ?? '?').charAt(0).toUpperCase()}
                           </ThemedText>
                         </View>
-                        <ThemedText>{user.name}</ThemedText>
+                        <ThemedText style={styles.inviteeName}>
+                          {inviteeUser?.name ?? inviteeNames[inviteeId] ?? inviteeId}
+                        </ThemedText>
+                        <View style={[styles.statusBadge, { backgroundColor: statusColor + '20', borderColor: statusColor }]}>
+                          <ThemedText style={[styles.statusText, { color: statusColor }]}>
+                            {statusLabel}
+                          </ThemedText>
+                        </View>
                       </View>
                     );
                   })}
@@ -258,6 +398,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  centered: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backButtonAbsolute: {
+    position: 'absolute',
+    top: 60,
+    left: 16,
+    padding: 4,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -335,6 +485,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  inviteeName: {
+    flex: 1,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   inviteeAvatar: {
     width: 32,

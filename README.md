@@ -285,7 +285,7 @@ eas build --profile production --platform all
 **Jest 29** + **@testing-library/react-native** with `babel-preset-expo` for TypeScript transforms.
 
 ```bash
-npm test                  # Run all tests (95 tests across 7 suites)
+npm test                  # Run all tests (265 tests across 24 suites)
 npm run test:watch        # Watch mode — re-runs affected tests on save
 npm run test:coverage     # Coverage report (utils/ + components/)
 ```
@@ -295,14 +295,31 @@ Tests are organized by type in `__tests__/`:
 ```
 __tests__/
   components/
-    themed-text.test.tsx     # ThemedText — all types, testID passthrough
-    themed-view.test.tsx     # ThemedView — children, testID, multiple children
-    ai-input-bar.test.tsx    # AiInputBar — renders, initial value, input handling
+    themed-text.test.tsx          # ThemedText — all types, testID passthrough
+    themed-view.test.tsx          # ThemedView — children, testID, multiple children
+    ai-input-bar.test.tsx         # AiInputBar — renders, initial value, input handling
+    calendar-chip.test.tsx        # CalendarChip — toggle state, color
+    calendar-header.test.tsx      # CalendarHeader — month/year display, navigation
+    calendar-settings.test.tsx    # CalendarSettings — member management, permissions
+    event-card.test.tsx           # EventCard — rendering, time display
+    form-field.test.tsx           # FormField — label rendering
+    form-picker-row.test.tsx      # FormPickerRow — press handling
+    form-switch-row.test.tsx      # FormSwitchRow — toggle behavior
+    form-text-input.test.tsx      # FormTextInput — input handling
+    pending-items.test.tsx        # PendingItems — invitations, accept/decline, calendar picker
+    view-switcher.test.tsx        # ViewSwitcher — tab switching
+  hooks/
+    use-countdown.test.ts         # useCountdown — timer logic
+    use-interests.test.ts         # useInterests — selection state
+    use-theme-color.test.ts       # useThemeColor — color resolution
   utils/
-    date-helpers.test.ts     # Grid generation, formatting, event filtering
-    validation.test.ts       # Email, password, name, and form validation
-    calendar-helpers.test.ts # Calendar color mapping and fallback behavior
-    rl-helpers.test.ts       # Thompson Sampling slot index formula
+    auth-constants.test.ts        # Auth validation constants
+    date-helpers.test.ts          # Grid generation, formatting, event filtering
+    date-helpers-extended.test.ts # Additional date helper coverage
+    validation.test.ts            # Email, password, name, and form validation
+    calendar-helpers.test.ts      # Calendar color mapping and fallback behavior
+    rl-helpers.test.ts            # Thompson Sampling slot index formula
+    interests-constants.test.ts   # Interests constants
   test-utils.tsx             # Shared renderWithProviders() helper
   tsconfig.json              # Jest type declarations
 ```

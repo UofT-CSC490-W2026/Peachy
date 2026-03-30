@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import Constants from 'expo-constants';
 import { Audio } from 'expo-av';
-
 import { BottomTabBar, BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { HapticTab } from '@/components/haptic-tab';
 import { HomeIcon, CalendarIcon, ChatIcon, ProfileIcon } from '@/components/ui/tab-icons';
@@ -50,6 +49,160 @@ export default function TabLayout() {
   const heightAnim = useRef(new Animated.Value(0)).current;
   const keyboardAnim = useRef(new Animated.Value(0)).current;
   const inputRef = useRef<TextInput>(null);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Microphone access is needed for voice input.');
+        return;
+      }
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY,
+      );
+      recordingRef.current = recording;
+      setIsRecording(true);
+    } catch {
+      Alert.alert('Error', 'Could not start recording. Please try again.');
+    }
+  }, []);
+
+  const stopRecording = useCallback(async () => {
+    const recording = recordingRef.current;
+    if (!recording) return;
+
+    setIsRecording(false);
+    setIsTranscribing(true);
+    try {
+      await recording.stopAndUnloadAsync();
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+      const uri = recording.getURI();
+      recordingRef.current = null;
+      if (!uri) throw new Error('No recording URI');
+
+      const transcript = await transcribeAudio(uri, getIdToken);
+      if (transcript.trim()) {
+        setInputText(prev => prev ? `${prev} ${transcript.trim()}` : transcript.trim());
+        inputRef.current?.focus();
+      } else {
+        Alert.alert('No Speech Detected', 'Could not detect any speech. Please try again.');
+      }
+    } catch (err) {
+      if (err instanceof AuthError) {
+        Alert.alert('Session Expired', 'Please log in again.');
+      } else {
+        Alert.alert('Transcription Failed', err instanceof Error ? err.message : 'Please try again.');
+      }
+    } finally {
+      setIsTranscribing(false);
+    }
+  }, [getIdToken]);
+
+  const handleMicPress = useCallback(() => {
+    if (isTranscribing || isLoading) return;
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  }, [isRecording, isTranscribing, isLoading, startRecording, stopRecording]);
+
+  const openSheet = useCallback(() => {
+    setSheetVisible(true);
+    heightAnim.setValue(0);
+    Animated.parallel([
+      Animated.timing(heightAnim, { toValue: sheetHeight, duration: 200, useNativeDriver: false }),
+      Animated.timing(rotateAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+    ]).start(() => { inputRef.current?.focus(); });
+  }, [heightAnim, rotateAnim, sheetHeight]);
+
+  const closeSheet = useCallback(() => {
+    Keyboard.dismiss();
+    if (recordingRef.current) {
+      recordingRef.current.stopAndUnloadAsync().catch(() => {});
+      recordingRef.current = null;
+      setIsRecording(false);
+    }
+    Animated.parallel([
+      Animated.timing(heightAnim, { toValue: 0, duration: 200, useNativeDriver: false }),
+      Animated.timing(rotateAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start(() => { setSheetVisible(false); setInputText(''); });
+  }, [heightAnim, rotateAnim]);
+
+  const handleSend = useCallback(async (text?: string) => {
+    const message = (text ?? inputText).trim();
+    if (!message || isLoading) return;
+
+    setIsLoading(true);
+    try {
+      const token = await getIdToken();
+      if (!token) throw new AuthError();
+
+      const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, string>;
+      const apiUrl = (extra.apiUrl ?? '').replace(/\/$/, '');
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+      const response = await fetch(`${apiUrl}/ai/parse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ inputText: message, timezone }),
+      });
+
+      if (response.status === 401) throw new AuthError();
+      if (!response.ok) {
+        let errMsg = `Request failed with status ${response.status}`;
+        try {
+          const errorBody = await response.json() as Record<string, unknown>;
+          if (typeof errorBody.message === 'string') errMsg = errorBody.message;
+        } catch { /* ignore */ }
+        throw new ApiError(errMsg, response.status);
+      }
+
+      const parsed = await response.json() as AIParseResult;
+      const data = parsed.extractedData;
+
+      const calendarId = calendars[0]?.id;
+      if (!calendarId) {
+        Alert.alert('No Calendar', 'Please create a calendar first before using AI scheduling.');
+        closeSheet();
+        return;
+      }
+
+      await createEvent(calendarId, {
+        title: data.title || 'Untitled Event',
+        startTime: data.startTime,
+        endTime: data.endTime,
+        isAllDay: data.isAllDay ?? false,
+        timezone,
+        ...(data.location ? { location: data.location } : {}),
+        invitedUserIds: data.invitedUserIds || [],
+        aiGenerated: true,
+        aiInput: message,
+        aiSuggested: parsed,
+      });
+
+      if (user && data.startTime) {
+        const suggestedSlotIndex = getSlotIndex(new Date(data.startTime));
+        fetch(`${apiUrl}/users/${encodeURIComponent(user.id)}/rl/feedback`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action: 'accept', suggestedSlotIndex }),
+        }).catch(() => {});
+      }
+
+      closeSheet();
+      Alert.alert('Event Created', `"${data.title}" has been added to your calendar.`);
+    } catch (err) {
+      console.error('AI send error:', err);
+      Alert.alert('Error', 'Could not create event. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [inputText, isLoading, getIdToken, closeSheet, calendars, createEvent, user]);
 
   const renderTabBar = useCallback((props: BottomTabBarProps) => (
     <View>
@@ -125,185 +278,6 @@ export default function TabLayout() {
       </View>
     </View>
   ), [sheetVisible, heightAnim, keyboardAnim, theme, isRecording, isTranscribing, isLoading, inputText, isKeyboardVisible, tabBarHeight, handleMicPress, handleSend]);
-
-  const openSheet = useCallback(() => {
-    setSheetVisible(true);
-    heightAnim.setValue(0);
-    Animated.parallel([
-      Animated.timing(heightAnim, {
-        toValue: sheetHeight,
-        duration: 200,
-        useNativeDriver: false,
-      }),
-      Animated.timing(rotateAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      inputRef.current?.focus();
-    });
-  }, [heightAnim, rotateAnim, sheetHeight]);
-
-  const closeSheet = useCallback(() => {
-    Keyboard.dismiss();
-    if (recordingRef.current) {
-      recordingRef.current.stopAndUnloadAsync().catch(() => {});
-      recordingRef.current = null;
-      setIsRecording(false);
-    }
-    Animated.parallel([
-      Animated.timing(heightAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: false,
-      }),
-      Animated.timing(rotateAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setSheetVisible(false);
-      setInputText('');
-    });
-  }, [heightAnim, rotateAnim]);
-
-  const handleSend = useCallback(async (text?: string) => {
-    const message = (text ?? inputText).trim();
-    if (!message || isLoading) return;
-
-    setIsLoading(true);
-    try {
-      const token = await getIdToken();
-      if (!token) throw new AuthError();
-
-      const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, string>;
-      const apiUrl = (extra.apiUrl ?? '').replace(/\/$/, '');
-      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-      const response = await fetch(`${apiUrl}/ai/parse`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ inputText: message, timezone }),
-      });
-
-      if (response.status === 401) throw new AuthError();
-      if (!response.ok) {
-        let errMsg = `Request failed with status ${response.status}`;
-        try {
-          const errorBody = await response.json() as Record<string, unknown>;
-          if (typeof errorBody.message === 'string') errMsg = errorBody.message;
-        } catch { /* ignore */ }
-        throw new ApiError(errMsg, response.status);
-      }
-
-      const parsed = await response.json() as AIParseResult;
-      const data = parsed.extractedData;
-
-      const calendarId = calendars[0]?.id;
-      if (!calendarId) {
-        Alert.alert('No Calendar', 'Please create a calendar first before using AI scheduling.');
-        closeSheet();
-        return;
-      }
-
-      await createEvent(calendarId, {
-        title: data.title || 'Untitled Event',
-        startTime: data.startTime,
-        endTime: data.endTime,
-        isAllDay: data.isAllDay ?? false,
-        timezone,
-        ...(data.location ? { location: data.location } : {}),
-        invitedUserIds: data.invitedUserIds || [],
-        aiGenerated: true,
-        aiInput: message,
-        aiSuggested: parsed,
-      });
-
-      // Fire-and-forget RL feedback — user accepted AI suggestion as-is
-      if (user && data.startTime) {
-        const suggestedSlotIndex = getSlotIndex(new Date(data.startTime));
-        fetch(`${apiUrl}/users/${encodeURIComponent(user.id)}/rl/feedback`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ action: 'accept', suggestedSlotIndex }),
-        }).catch(() => {});
-      }
-
-      closeSheet();
-      Alert.alert('Event Created', `"${data.title}" has been added to your calendar.`);
-    } catch (err) {
-      console.error('AI send error:', err);
-      Alert.alert('Error', 'Could not create event. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [inputText, isLoading, getIdToken, closeSheet, calendars, createEvent]);
-
-  const startRecording = useCallback(async () => {
-    try {
-      const { status } = await Audio.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Microphone access is needed for voice input.');
-        return;
-      }
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY,
-      );
-      recordingRef.current = recording;
-      setIsRecording(true);
-    } catch {
-      Alert.alert('Error', 'Could not start recording. Please try again.');
-    }
-  }, []);
-
-  const stopRecording = useCallback(async () => {
-    const recording = recordingRef.current;
-    if (!recording) return;
-
-    setIsRecording(false);
-    setIsTranscribing(true);
-    try {
-      await recording.stopAndUnloadAsync();
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-      const uri = recording.getURI();
-      recordingRef.current = null;
-      if (!uri) throw new Error('No recording URI');
-
-      const transcript = await transcribeAudio(uri, getIdToken);
-      if (transcript.trim()) {
-        setInputText(prev => prev ? `${prev} ${transcript.trim()}` : transcript.trim());
-        inputRef.current?.focus();
-      } else {
-        Alert.alert('No Speech Detected', 'Could not detect any speech. Please try again.');
-      }
-    } catch (err) {
-      if (err instanceof AuthError) {
-        Alert.alert('Session Expired', 'Please log in again.');
-      } else {
-        Alert.alert('Transcription Failed', err instanceof Error ? err.message : 'Please try again.');
-      }
-    } finally {
-      setIsTranscribing(false);
-    }
-  }, [getIdToken]);
-
-  const handleMicPress = useCallback(() => {
-    if (isTranscribing || isLoading) return;
-    if (isRecording) {
-      stopRecording();
-    } else {
-      startRecording();
-    }
-  }, [isRecording, isTranscribing, isLoading, startRecording, stopRecording]);
 
   // Track keyboard height so the sheet stays above the keyboard
   useEffect(() => {

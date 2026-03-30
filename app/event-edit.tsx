@@ -20,10 +20,10 @@ export default function EventEditScreen() {
   const params = useLocalSearchParams();
   const eventId = params.id as string;
 
-  const { calendars, events, updateEvent, getUser } = useCalendar();
+  const { calendars, events, updateEvent } = useCalendar();
   const { logout, user } = useAuth();
   const event = events.find(e => e.id === eventId);
-  const isOwner = event && user && event.createdBy === user.id;
+  const isOwner = event && user && event.createdBy === user.id && !event.linkedEventId;
 
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');
@@ -221,26 +221,6 @@ export default function EventEditScreen() {
             <IconSymbol name="chevron.right" size={16} color={tintColor} />
           </Pressable>
 
-          {/* Show invited users */}
-          {invitedUserIds.length > 0 && (
-            <View style={styles.inviteesList}>
-              {invitedUserIds.map(userId => {
-                const user = getUser(userId);
-                if (!user) return null;
-                return (
-                  <View key={userId} style={[styles.inviteeChip, { backgroundColor: surfaceColor, borderColor }]}>
-                    <ThemedText style={styles.inviteeChipText}>{user.name}</ThemedText>
-                    <Pressable
-                      onPress={() => setInvitedUserIds(invitedUserIds.filter(id => id !== userId))}
-                      hitSlop={8}
-                    >
-                      <IconSymbol name="xmark" size={14} color={tintColor} />
-                    </Pressable>
-                  </View>
-                );
-              })}
-            </View>
-          )}
         </FormField>
 
         {/* Availability Checker */}
@@ -403,24 +383,6 @@ const styles = StyleSheet.create({
   addPeopleText: {
     flex: 1,
     fontSize: 16,
-  },
-  inviteesList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 12,
-  },
-  inviteeChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 8,
-  },
-  inviteeChipText: {
-    fontSize: 14,
   },
   errorContainer: {
     flex: 1,

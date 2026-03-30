@@ -69,37 +69,84 @@ export function AiInputBar({ initialValue }: AiInputBarProps = {}) {
       const parsed = await response.json() as AIParseResult;
       const data = parsed.extractedData;
 
-      const calendarId = calendars[0]?.id;
-      if (!calendarId) {
+      if (calendars.length === 0) {
         Alert.alert('No Calendar', 'Please create a calendar first before using AI scheduling.');
         return;
       }
 
-      await createEvent(calendarId, {
-        title: data.title || 'Untitled Event',
-        startTime: data.startTime,
-        endTime: data.endTime,
-        isAllDay: data.isAllDay ?? false,
-        timezone,
-        ...(data.location ? { location: data.location } : {}),
-        invitedUserIds: data.invitedUserIds || [],
-        aiGenerated: true,
-        aiInput: trimmedInput,
-        aiSuggested: parsed,
+      // Warn about unresolved @mentions before creating the event
+      const unresolved = (parsed as any).unresolvedMentions as Array<{ username: string }> | undefined;
+      if (unresolved && unresolved.length > 0) {
+        const names = unresolved.map((m: { username: string }) => `@${m.username}`).join(', ');
+        await new Promise<void>(resolve =>
+          Alert.alert(
+            'Some people couldn\'t be added',
+            `${names} ${unresolved.length === 1 ? 'is' : 'are'} not in your contacts. The event will be created without them.`,
+            [{ text: 'OK', onPress: resolve }],
+          )
+        );
+      }
+
+      // If user has multiple calendars, let them pick; otherwise use the only one
+      const calendarId = await new Promise<string | null>(resolve => {
+        if (calendars.length === 1) {
+          resolve(calendars[0].id);
+          return;
+        }
+        Alert.alert(
+          'Add to Calendar',
+          'Which calendar should this event be added to?',
+          [
+            ...calendars.map(cal => ({ text: cal.name, onPress: () => resolve(cal.id) })),
+            { text: 'Cancel', style: 'cancel' as const, onPress: () => resolve(null) },
+          ],
+        );
       });
 
-      // Fire-and-forget RL feedback — user accepted AI suggestion as-is
-      if (user && data.startTime) {
-        const suggestedSlotIndex = getSlotIndex(new Date(data.startTime));
-        fetch(`${apiUrl}/users/${encodeURIComponent(user.id)}/rl/feedback`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ action: 'accept', suggestedSlotIndex }),
-        }).catch(() => {});
+      if (!calendarId) return; // user cancelled
+
+      // RL feedback is sent regardless of whether event creation succeeds,
+      // so the model always learns what time the user accepted.
+      const suggestedSlotIndex = data.startTime ? getSlotIndex(new Date(data.startTime)) : null;
+      const sendRlFeedback = () => {
+        if (user && suggestedSlotIndex !== null) {
+          fetch(`${apiUrl}/users/${encodeURIComponent(user.id)}/rl/feedback`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ action: 'accept', suggestedSlotIndex }),
+          }).catch(() => {});
+        }
+      };
+
+      try {
+        await createEvent(calendarId, {
+          title: data.title || 'Untitled Event',
+          startTime: data.startTime,
+          endTime: data.endTime,
+          isAllDay: data.isAllDay ?? false,
+          timezone,
+          ...(data.location ? { location: data.location } : {}),
+          invitedUserIds: data.invitedUserIds || [],
+          aiGenerated: true,
+          aiInput: trimmedInput,
+          aiSuggested: parsed,
+        });
+        sendRlFeedback();
+      } catch (createErr) {
+        sendRlFeedback();
+        throw createErr; // re-throw so outer catch shows the error alert
       }
 
       setInputText('');
-      Alert.alert('Event Created', `"${data.title}" has been added to your calendar.`);
+      // Surface any AI ambiguities after creation so the user can review/edit
+      if (parsed.ambiguities && parsed.ambiguities.length > 0) {
+        Alert.alert(
+          `"${data.title}" created`,
+          `Heads up: ${parsed.ambiguities[0]}. Tap the event to review.`,
+        );
+      } else {
+        Alert.alert('Event Created', `"${data.title}" has been added to your calendar.`);
+      }
     } catch (err) {
       console.error('AI send error:', err);
       Alert.alert('Error', 'Could not create event. Please try again.');
