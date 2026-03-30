@@ -508,11 +508,10 @@ CalendarEvent
 
 **Errors:**
 - `400` - Validation error (endTime before startTime, etc.)
-- `403` - User is not a member of this calendar
+- `403` - Only the calendar owner can create events in this calendar
 
 **Notes:**
 - Creates pending items (event_invite) for invitedUserIds
-- Sends event invite messages to calendar group chat
 - Sets createdBy to current user
 - Triggers `onCalendarUpdate` subscription
 - AI fields are stored for RL training (improving AI accuracy over time)
@@ -549,11 +548,10 @@ CalendarEvent
 ```
 
 **Errors:**
-- `403` - Only creator (createdBy) can update
+- `403` - Only the calendar owner can update
 
 **Notes:**
 - Creates pending items (event_update) for existing invitees if time/date changes
-- Updates invite messages in chat
 - Triggers `onCalendarUpdate` subscription
 - **Updates user RlPreferences (Thompson Sampling):**
   - If event was aiGenerated=true and time was changed: increment β for old slot, α for new slot
@@ -572,12 +570,11 @@ Delete event.
 ```
 
 **Errors:**
-- `403` - Only creator can delete
+- `403` - Only the calendar owner can delete
 
 **Notes:**
 - Deletes all related pending items
 - Sends notification to invitees
-- Removes event invite messages from chat (or marks as cancelled)
 - Triggers `onCalendarUpdate` subscription
 
 ---
@@ -924,8 +921,8 @@ Accept pending invitation.
 - Calendar membership is currently managed directly via `POST /calendars/:calendarId/members` (owner adds member immediately).
 
 **event_invite:**
-- Updates inviteStatus in chat messages (eventId match)
-- Triggers `onEventInviteUpdate` subscription
+- Creates a linked copy of the event in the invitee's chosen calendar
+- Updates `InviteeStatuses` on the original event
 
 **event_update:**
 - Updates user's acknowledgment of event changes
@@ -949,8 +946,7 @@ Decline pending invitation.
 - Not currently implemented in pending decline flow.
 
 **event_invite:**
-- Updates inviteStatus in chat messages (eventId match)
-- Triggers `onEventInviteUpdate` subscription
+- Updates `InviteeStatuses` on the original event
 
 **event_update:**
 - Acknowledges user has seen the update

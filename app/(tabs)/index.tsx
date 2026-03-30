@@ -6,16 +6,23 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useCalendar } from '@/contexts/calendar-context';
+import { useAuth } from '@/contexts/auth-context';
 import { UpcomingEvents } from '@/components/calendar/upcoming-events';
 import { PendingItems } from '@/components/pending-items';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { calendars, visibleEvents, pendingItems, acceptPendingItem, declinePendingItem, refreshCalendars, refreshPendingItems } = useCalendar();
+  const { user } = useAuth();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const tintColor = useThemeColor({}, 'tint');
   const borderColor = useThemeColor({}, 'border');
   const surfaceColor = useThemeColor({}, 'surface');
+  const ownedCalendars = useMemo(
+    () => calendars.filter(c => c.ownerId === user?.id),
+    [calendars, user?.id]
+  );
+  const canCreateEvent = ownedCalendars.length > 0;
 
   // All items fetched are already 'pending' status — no need to filter
   const displayedPendingItems = useMemo(() => pendingItems, [pendingItems]);
@@ -57,8 +64,15 @@ export default function HomeScreen() {
       <View style={[styles.header, { borderBottomColor: borderColor, backgroundColor: surfaceColor }]}>
         <ThemedText type="title">Home</ThemedText>
         <Pressable
-          style={[styles.addButton, { backgroundColor: tintColor, borderColor: tintColor }]}
-          onPress={() => router.push('/event-create')}
+          style={[styles.addButton, { backgroundColor: tintColor, borderColor: tintColor, opacity: canCreateEvent ? 1 : 0.5 }]}
+          onPress={() => {
+            if (!canCreateEvent) {
+              Alert.alert('No Owned Calendars', 'Create or own a calendar before creating events.');
+              return;
+            }
+            router.push('/event-create');
+          }}
+          disabled={!canCreateEvent}
         >
           <IconSymbol name="plus" size={24} color="#FFFFFF" />
         </Pressable>

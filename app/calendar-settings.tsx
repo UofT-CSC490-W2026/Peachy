@@ -17,8 +17,7 @@ export default function CalendarSettingsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const calendarId = params.id as string;
-
-  const { calendars, updateCalendar, deleteCalendar, addCalendarMember, removeCalendarMember, getUser } = useCalendar();
+  const { calendars, updateCalendar, deleteCalendar, addCalendarMember, removeCalendarMember, getUser, fetchUser } = useCalendar();
   const { logout } = useAuth();
   const calendar = calendars.find(cal => cal.id === calendarId);
 
@@ -31,6 +30,7 @@ export default function CalendarSettingsScreen() {
   const [name, setName] = useState(calendar?.name || '');
   const [description, setDescription] = useState(calendar?.description || '');
   const [selectedColor, setSelectedColor] = useState(calendar?.color || calendarColors[0]);
+  const [memberNames, setMemberNames] = useState<Record<string, string>>({});
   const [calendarType, setCalendarType] = useState<CalendarType>(calendar?.type || 'personal');
   const [isSaving, setIsSaving] = useState(false);
 

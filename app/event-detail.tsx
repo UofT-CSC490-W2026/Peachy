@@ -53,11 +53,16 @@ export default function EventDetailScreen() {
   }, [eventId, localEvent, getIdToken]);
 
   const event = localEvent ?? fetchedEvent;
+  const calendar = event ? calendars.find(c => c.id === event.calendarId) : null;
+  const isInvitee = !!(user && event?.invitedUserIds?.includes(user.id));
+  const isPendingInviteView = isInvitee && !event?.linkedEventId;
+  const isOwner = event && user && calendar && calendar.ownerId === user.id && !event.linkedEventId;
 
-  // Fetch display names for invitees and organizer (linked events) not already in the user cache
+  // Fetch display names for invitees and organizer (linked or pending invites) not already in the user cache
   useEffect(() => {
     const idsToFetch = new Set(event?.invitedUserIds ?? []);
     if (event?.originalCreatedBy) idsToFetch.add(event.originalCreatedBy);
+    if (isPendingInviteView && event?.createdBy) idsToFetch.add(event.createdBy);
     if (idsToFetch.size === 0) return;
     idsToFetch.forEach(uid => {
       if (!getUser(uid)) {
@@ -66,9 +71,7 @@ export default function EventDetailScreen() {
         });
       }
     });
-  }, [event?.invitedUserIds, event?.originalCreatedBy, fetchUser, getUser]);
-  const calendar = event ? calendars.find(c => c.id === event.calendarId) : null;
-  const isOwner = event && user && event.createdBy === user.id && !event.linkedEventId;
+  }, [event?.invitedUserIds, event?.originalCreatedBy, event?.createdBy, isPendingInviteView, fetchUser, getUser]);
 
   // Derive RSVP status for the current user on linked (invited) event copies
   const myRsvpStatus: 'accepted' | 'declined' | 'pending' | null =
@@ -81,7 +84,16 @@ export default function EventDetailScreen() {
           // No pending item + linked event present = accepted
           return 'accepted';
         })()
-      : null;
+      : isPendingInviteView
+        ? (() => {
+            if (!event) return null;
+            const myPending = pendingItems.find(
+              p => p.type === 'event_invite' && p.eventId === event.id
+            );
+            if (!myPending) return null;
+            return myPending.status === 'declined' ? 'declined' : 'pending';
+          })()
+        : null;
 
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');
@@ -165,7 +177,7 @@ export default function EventDetailScreen() {
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         {/* Invited badge */}
-        {event.linkedEventId && (
+        {(event.linkedEventId || isPendingInviteView) && (
           <View style={[styles.aiBadge, { backgroundColor: tintColor + '10', borderColor: borderColor }]}>
             <IconSymbol name="person.2" size={14} color={textSecondary} />
             <ThemedText style={[styles.aiText, { color: textSecondary }]}>
@@ -253,7 +265,7 @@ export default function EventDetailScreen() {
         )}
 
         {/* Organizer — shown on linked copies so invitees know who created the event */}
-        {(event.originalCreatedBy || event.linkedEventId) && (
+        {(event.originalCreatedBy || event.linkedEventId || isPendingInviteView) && (
           <View style={[styles.section, { backgroundColor: surfaceColor, borderColor }]}>
             <View style={styles.sectionRow}>
               <IconSymbol name="person.fill" size={24} color={tintColor} />
@@ -268,6 +280,17 @@ export default function EventDetailScreen() {
                     </View>
                     <ThemedText style={styles.inviteeName}>
                       {getUser(event.originalCreatedBy)?.name ?? inviteeNames[event.originalCreatedBy] ?? event.originalCreatedBy}
+                    </ThemedText>
+                  </View>
+                ) : isPendingInviteView && event.createdBy ? (
+                  <View style={styles.inviteeRow}>
+                    <View style={[styles.inviteeAvatar, { backgroundColor: tintColor + '20' }]}>
+                      <ThemedText style={[styles.inviteeAvatarText, { color: tintColor }]}>
+                        {(getUser(event.createdBy)?.name ?? inviteeNames[event.createdBy] ?? '?').charAt(0).toUpperCase()}
+                      </ThemedText>
+                    </View>
+                    <ThemedText style={styles.inviteeName}>
+                      {getUser(event.createdBy)?.name ?? inviteeNames[event.createdBy] ?? event.createdBy}
                     </ThemedText>
                   </View>
                 ) : (
