@@ -17,7 +17,7 @@ npm install
 npx expo start
 ```
 
-**Note:** Environment files (`.env.development`, `.env.production`) already exist but are minimal. Add backend environment variables later when you implement AWS infrastructure.
+**Note:** Copy `.env.example` to `.env.development` and fill in your AWS values (API URL, Cognito pool ID, client ID) before running.
 
 In the output, you'll find options to open the app in a:
 
@@ -159,7 +159,8 @@ Peachy/
 ## Current Status
 
 **Frontend:** ✅ Complete UI with all screens, calendar views, event management, chat, and peachy pink theme
-**Backend:** ⏳ Not implemented (see API_SPECIFICATION.md for design)
+**Backend:** ✅ AWS Serverless infrastructure deployed (Lambda, DynamoDB, API Gateway, Cognito — ca-central-1)
+**AI:**  ✅ AWS Bedrock integration implemented (natural-language scheduling via Claude Haiku/Sonnet)
 
 ## Environment Setup
 
@@ -167,23 +168,18 @@ The app supports separate **development** and **production** environments with d
 
 ### Environment Files
 
-Environment files already exist but contain **minimal configuration**. Backend variables will be added when AWS infrastructure is implemented.
-
-1. **`.env.example`** - Template (committed to git)
-   - Shows structure for environment variables
-   - Copy this when adding new environment variables
+1. **`.env.example`** - Template (committed to git) — copy this to get started
 
 2. **`.env.development`** - Dev environment (gitignored)
-   - Currently: `APP_ENV=development`
-   - Future: API URLs, AWS Cognito pools, etc.
-   - Bundle ID: `com.peachy.dev`
-   - App name: "Peachy (Dev)"
+   - `APP_ENV=development`
+   - `API_URL` — dev API Gateway URL
+   - `COGNITO_USER_POOL_ID` / `COGNITO_CLIENT_ID` — from AWS Cognito
+   - Bundle ID: `com.peachy.dev` | App name: "Peachy (Dev)"
 
 3. **`.env.production`** - Production environment (gitignored)
-   - Currently: `APP_ENV=production`
-   - Future: Production API URLs, AWS resources
-   - Bundle ID: `com.peachy.app`
-   - App name: "Peachy"
+   - `APP_ENV=production`
+   - Production API URLs and AWS resources
+   - Bundle ID: `com.peachy.app` | App name: "Peachy"
 
 4. **`.env.local`** - Local overrides (gitignored, optional)
    - Overrides `.env.development` for local testing
@@ -253,21 +249,32 @@ npm run ios:prod       # Prod build on iOS
 npm run android:prod   # Prod build on Android
 ```
 
-**EAS Build (for distribution):**
+**Sharing with testers:**
+
+> ⚠️ **Limitation:** EAS Update requires a custom dev client build — plain Expo Go **cannot** load EAS updates on SDK 54+. iOS distribution requires an Apple Developer account ($99/yr), so iOS builds are not available for testing at this time.
+
+**Option 1 — Android APK (recommended for testers)**
+
+No Apple account needed. Builds a shareable `.apk` testers can install directly.
+
 ```bash
-# Install EAS CLI
 npm install -g eas-cli
-
-# Configure EAS project (first time only)
-eas build:configure
-
-# Build for internal testing
-eas build --profile development --platform ios
+eas login
 eas build --profile preview --platform android
-
-# Build for production
-eas build --profile production --platform all
 ```
+
+EAS emails you a download link when done (~10–15 min). Share it with testers — they install the `.apk` directly, no app store needed.
+
+**Option 2 — Local dev server with tunnel (requires repo access)**
+
+Testers must clone the repo, set up `.env.development` with the correct AWS values (see Environment Setup below), then run:
+
+```bash
+npm install
+npx expo start --tunnel
+```
+
+Scan the QR code with Expo Go — works on any network.
 
 ### What's Different Between Environments
 
