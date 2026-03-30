@@ -300,12 +300,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#E74C3C',
   },
-  linkedPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
   linkedPillText: {
     fontSize: 12,
     fontWeight: '600',

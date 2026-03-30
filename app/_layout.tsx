@@ -43,6 +43,7 @@ function RootNavigator() {
 
     if (!isAuthenticated && !inAuthGroup) {
       pushRegisteredRef.current = false; // Reset on logout
+      gcalPromptShownRef.current = false; // Reset on logout
       router.replace('/(auth)/welcome');
     } else if (isAuthenticated && inAuthGroup) {
       router.replace('/(tabs)');

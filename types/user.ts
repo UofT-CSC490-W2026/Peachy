@@ -6,7 +6,7 @@ export interface User {
   avatarUrl?: string;
   bio?: string;
   interests?: string[];
-  googleCalendarLinked?: boolean; // Set by backend after Google Calendar OAuth // Array of interest tag IDs (e.g. ["running","hiking"])
+  googleCalendarLinked?: boolean; // Set by backend after Google Calendar OAuth
   createdAt: string;
   updatedAt: string;
 }

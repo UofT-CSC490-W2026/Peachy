@@ -7,6 +7,7 @@ import {
   getEventsForTomorrow,
   getEventsThisWeek,
   formatDateSectionHeader,
+  formatTime,
   getMonthName,
   getDayName,
 } from '@/utils/date-helpers';
@@ -356,5 +357,57 @@ describe('getDayName', () => {
     expect(getDayName(0)).toBe('Sun');
     expect(getDayName(6)).toBe('Sat');
     expect(getDayName(3)).toBe('Wed');
+  });
+});
+
+// ── formatTime with timezone ─────────────────────────────────────────────────
+
+describe('formatTime with timezone', () => {
+  it('formats a UTC timestamp in UTC timezone', () => {
+    // 2026-03-23T14:00:00Z → 2:00 PM UTC
+    const date = new Date('2026-03-23T14:00:00Z');
+    expect(formatTime(date, 'UTC')).toBe('2:00 PM');
+  });
+
+  it('formats a UTC timestamp in America/Toronto (UTC-4 in summer)', () => {
+    // 2026-06-15T14:00:00Z = 10:00 AM EDT
+    const date = new Date('2026-06-15T14:00:00Z');
+    expect(formatTime(date, 'America/Toronto')).toBe('10:00 AM');
+  });
+
+  it('formats midnight UTC correctly', () => {
+    const date = new Date('2026-03-23T00:00:00Z');
+    expect(formatTime(date, 'UTC')).toBe('12:00 AM');
+  });
+
+  it('falls back to local time for an invalid timezone', () => {
+    // Should not throw — falls back to device local hours/minutes
+    const date = new Date('2026-03-23T09:00:00Z');
+    const result = formatTime(date, 'Not/A/Timezone');
+    expect(typeof result).toBe('string');
+    expect(result).toMatch(/\d+:\d{2} (AM|PM)/);
+  });
+});
+
+// ── getEventTopOffset with timezone ──────────────────────────────────────────
+
+describe('getEventTopOffset with timezone', () => {
+  it('returns correct offset for 2pm UTC in UTC timezone', () => {
+    // 2026-03-23T14:00:00Z = 14h * 60 = 840
+    const date = new Date('2026-03-23T14:00:00Z');
+    expect(getEventTopOffset(date, 'UTC')).toBe(840);
+  });
+
+  it('returns correct offset for UTC time converted to EDT', () => {
+    // 2026-06-15T14:00:00Z = 10:00 AM EDT → 10 * 60 = 600
+    const date = new Date('2026-06-15T14:00:00Z');
+    expect(getEventTopOffset(date, 'America/Toronto')).toBe(600);
+  });
+
+  it('falls back gracefully for invalid timezone', () => {
+    const date = new Date('2026-03-23T09:00:00Z');
+    const result = getEventTopOffset(date, 'Bad/Zone');
+    expect(typeof result).toBe('number');
+    expect(result).toBeGreaterThanOrEqual(0);
   });
 });
