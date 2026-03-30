@@ -112,7 +112,7 @@ export function TimeGrid({ events, calendars, columns = 1, getColumnEvents, getC
 
   const renderEvent = (event: CalendarEvent, layout?: { left: number; width: number }, columnDate?: Date) => {
     const { start: effectiveStart, end: effectiveEnd } = getEffectiveEventRange(event, columnDate);
-    const top = getEventTopOffset(effectiveStart);
+    const top = getEventTopOffset(effectiveStart, event.timezone);
     const height = getEventHeight(effectiveStart, effectiveEnd);
     const cal = calendars.find(c => c.id === event.calendarId);
     const color = cal?.color ?? '#FF8C6B';

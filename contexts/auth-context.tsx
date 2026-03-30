@@ -259,7 +259,7 @@ interface AuthContextType {
   setPendingVerificationEmail: (email: string | null) => void;
   getIdToken: () => Promise<string | null>;
   fetchProfile: () => Promise<void>;
-  updateUser: (updates: Partial<Pick<User, 'name' | 'username' | 'interests'>>) => Promise<void>;
+  updateUser: (updates: Partial<Pick<User, 'name' | 'username' | 'bio' | 'interests'>>) => Promise<void>;
   login: (email: string, password: string) => Promise<AuthResult>;
   signup: (name: string, email: string, password: string) => Promise<AuthResult>;
   confirmSignup: (email: string, code: string) => Promise<AuthResult>;
@@ -569,7 +569,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const updateUser = useCallback(async (updates: Partial<Pick<User, 'name' | 'username' | 'interests'>>) => {
+  const updateUser = useCallback(async (updates: Partial<Pick<User, 'name' | 'username' | 'bio' | 'interests'>>) => {
     const updated = await apiClient.put<User>('/users/me', updates);
     setUser(updated);
   }, []);

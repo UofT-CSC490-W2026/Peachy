@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, StyleSheet, Pressable, FlatList, ActivityIndicator, Alert } from 'react-native';
+import { View, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -8,6 +8,8 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useGoogleCalendar, type GoogleCalendarItem } from '@/contexts/google-calendar-context';
 import { useCalendar } from '@/contexts/calendar-context';
 
+type ScreenMode = 'manage' | 'add';
+
 export default function GoogleCalendarLinkScreen() {
   const router = useRouter();
   const tintColor = useThemeColor({}, 'tint');
@@ -15,30 +17,38 @@ export default function GoogleCalendarLinkScreen() {
   const surfaceColor = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
   const dangerColor = useThemeColor({}, 'danger');
+  const successColor = useThemeColor({}, 'success');
 
-  const { isLinked, listCalendars, selectCalendars, disconnect, startLink, isLinking } = useGoogleCalendar();
-  const { refreshCalendars } = useCalendar();
+  const { isLinked, listCalendars, selectCalendars, unlinkCalendar, disconnect, startLink, isLinking } = useGoogleCalendar();
+  const { calendars: peachyCalendars, refreshCalendars } = useCalendar();
 
-  const [calendars, setCalendars] = useState<GoogleCalendarItem[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Google calendars available to add
+  const [googleCalendars, setGoogleCalendars] = useState<GoogleCalendarItem[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isLoadingCalendars, setIsLoadingCalendars] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [mode, setMode] = useState<ScreenMode>('manage');
 
-  // Load Google calendars once we're in the linked state
+  // Calendars already synced from Google
+  const linkedCalendars = peachyCalendars.filter(c => !!c.googleCalendarId);
+  const linkedGoogleIds = new Set(linkedCalendars.map(c => c.googleCalendarId!));
+
   useEffect(() => {
-    if (!isLinked) return;
-    loadCalendars();
-  }, [isLinked]);
+    if (!isLinked || hasLoaded) return;
+    setHasLoaded(true);
+    loadGoogleCalendars();
+  }, [isLinked, hasLoaded]);
 
-  const loadCalendars = async () => {
+  const loadGoogleCalendars = async () => {
     setIsLoadingCalendars(true);
     setLoadError(null);
     try {
       const items = await listCalendars();
-      setCalendars(items);
-      // Pre-select all by default
-      setSelected(new Set(items.map(c => c.id)));
+      setGoogleCalendars(items);
+      // Pre-select calendars not already linked
+      setSelectedIds(items.filter(c => !linkedGoogleIds.has(c.id)).map(c => c.id));
     } catch (err: any) {
       setLoadError(err?.message ?? 'Failed to load calendars');
     } finally {
@@ -47,29 +57,52 @@ export default function GoogleCalendarLinkScreen() {
   };
 
   const toggleCalendar = (id: string) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
   };
 
   const handleSave = async () => {
-    if (selected.size === 0) {
+    if (selectedIds.length === 0) {
       Alert.alert('Select Calendars', 'Please select at least one calendar to sync.');
       return;
     }
     setIsSaving(true);
     try {
-      await selectCalendars([...selected]);
+      const selectedCalendars = googleCalendars
+        .filter(c => selectedIds.includes(c.id))
+        .map(c => ({ id: c.id, name: c.name, color: c.color }));
+      await selectCalendars(selectedCalendars);
       await refreshCalendars();
-      router.back();
+      setMode('manage');
+      setSelectedIds([]);
     } catch (err: any) {
       Alert.alert('Sync Failed', err?.message ?? 'Could not link calendars. Please try again.');
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleUnlink = (peachyCalendarId: string, name: string) => {
+    Alert.alert(
+      'Remove Calendar',
+      `Remove "${name}" from Peachy? Events imported from this calendar will be deleted. Your Google Calendar is not affected.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await unlinkCalendar(peachyCalendarId);
+              await refreshCalendars();
+            } catch (err: any) {
+              Alert.alert('Error', err?.message ?? 'Failed to remove calendar.');
+            }
+          },
+        },
+      ],
+    );
   };
 
   const handleDisconnect = () => {
@@ -95,14 +128,7 @@ export default function GoogleCalendarLinkScreen() {
     );
   };
 
-  const handleStartLink = async () => {
-    const linked = await startLink();
-    if (linked) {
-      loadCalendars();
-    }
-  };
-
-  // ── Not yet linked — show link button ────────────────────────────────────────
+  // ── Not yet linked ────────────────────────────────────────────────────────────
   if (!isLinked) {
     return (
       <ThemedView style={styles.container}>
@@ -117,7 +143,7 @@ export default function GoogleCalendarLinkScreen() {
           </ThemedText>
           <Pressable
             style={[styles.primaryButton, { backgroundColor: tintColor }, isLinking && styles.buttonDisabled]}
-            onPress={handleStartLink}
+            onPress={() => startLink()}
             disabled={isLinking}
           >
             {isLinking ? (
@@ -131,10 +157,63 @@ export default function GoogleCalendarLinkScreen() {
     );
   }
 
-  // ── Linked — show calendar selection ─────────────────────────────────────────
+  // ── Manage mode: show linked calendars ───────────────────────────────────────
+  if (mode === 'manage') {
+    return (
+      <ThemedView style={styles.container}>
+        <Header onBack={() => router.back()} title="Google Calendar" />
+        <ScrollView contentContainerStyle={styles.list}>
+          <View style={styles.sectionHeader}>
+            <ThemedText style={styles.sectionTitle}>Synced Calendars</ThemedText>
+            <ThemedText style={[styles.sectionSub, { color: textSecondary }]}>
+              Tap a calendar to remove it from Peachy.
+            </ThemedText>
+          </View>
+
+          {linkedCalendars.length === 0 ? (
+            <ThemedText style={[styles.emptyText, { color: textSecondary }]}>
+              No calendars synced yet.
+            </ThemedText>
+          ) : (
+            linkedCalendars.map(cal => (
+              <View key={cal.id} style={[styles.calendarRow, { backgroundColor: surfaceColor, borderColor }]}>
+                <View style={[styles.colorSwatch, { backgroundColor: cal.color }]} />
+                <View style={styles.calendarInfo}>
+                  <ThemedText style={styles.calendarName}>{cal.name}</ThemedText>
+                  <ThemedText style={[styles.primaryBadge, { color: successColor }]}>Synced</ThemedText>
+                </View>
+                <Pressable
+                  onPress={() => handleUnlink(cal.id, cal.name)}
+                  hitSlop={8}
+                >
+                  <IconSymbol name="xmark" size={16} color={dangerColor} />
+                </Pressable>
+              </View>
+            ))
+          )}
+
+          <View style={styles.footer}>
+            <Pressable
+              style={[styles.primaryButton, { backgroundColor: tintColor }]}
+              onPress={() => setMode('add')}
+            >
+              <ThemedText style={styles.primaryButtonText}>Add More Calendars</ThemedText>
+            </Pressable>
+            <Pressable style={styles.disconnectButton} onPress={handleDisconnect}>
+              <ThemedText style={[styles.disconnectText, { color: dangerColor }]}>
+                Disconnect Google Calendar
+              </ThemedText>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </ThemedView>
+    );
+  }
+
+  // ── Add mode: pick new calendars to sync ─────────────────────────────────────
   return (
     <ThemedView style={styles.container}>
-      <Header onBack={() => router.back()} title="Google Calendar" />
+      <Header onBack={() => setMode('manage')} title="Add Calendars" />
 
       <View style={styles.sectionHeader}>
         <ThemedText style={styles.sectionTitle}>Choose calendars to sync</ThemedText>
@@ -151,70 +230,60 @@ export default function GoogleCalendarLinkScreen() {
       ) : loadError ? (
         <View style={styles.centeredContent}>
           <ThemedText style={[styles.errorText, { color: dangerColor }]}>{loadError}</ThemedText>
-          <Pressable style={[styles.retryButton, { borderColor }]} onPress={loadCalendars}>
+          <Pressable style={[styles.retryButton, { borderColor }]} onPress={loadGoogleCalendars}>
             <ThemedText style={styles.retryText}>Try Again</ThemedText>
           </Pressable>
         </View>
       ) : (
-        <FlatList
-          data={calendars}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.list}
-          renderItem={({ item }) => (
-            <Pressable
-              style={[styles.calendarRow, { backgroundColor: surfaceColor, borderColor }]}
-              onPress={() => toggleCalendar(item.id)}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: selected.has(item.id) }}
-            >
-              {/* Color swatch */}
-              <View style={[styles.colorSwatch, { backgroundColor: item.color }]} />
-
-              <View style={styles.calendarInfo}>
-                <ThemedText style={styles.calendarName}>{item.name}</ThemedText>
-                {item.primary && (
-                  <ThemedText style={[styles.primaryBadge, { color: textSecondary }]}>Primary</ThemedText>
-                )}
-              </View>
-
-              {/* Checkbox */}
-              <View style={[
-                styles.checkbox,
-                { borderColor: selected.has(item.id) ? tintColor : borderColor },
-                selected.has(item.id) && { backgroundColor: tintColor },
-              ]}>
-                {selected.has(item.id) && (
-                  <IconSymbol name="checkmark" size={12} color="#fff" />
-                )}
-              </View>
-            </Pressable>
-          )}
-          ListFooterComponent={
-            <View style={styles.footer}>
-              {/* Sync button */}
+        <ScrollView contentContainerStyle={styles.list}>
+          {googleCalendars.map(item => {
+            const alreadyLinked = linkedGoogleIds.has(item.id);
+            const isSelected = selectedIds.includes(item.id);
+            return (
               <Pressable
-                style={[styles.primaryButton, { backgroundColor: tintColor }, (isSaving || selected.size === 0) && styles.buttonDisabled]}
-                onPress={handleSave}
-                disabled={isSaving || selected.size === 0}
+                key={item.id}
+                style={[styles.calendarRow, { backgroundColor: surfaceColor, borderColor }, alreadyLinked && styles.rowDisabled]}
+                onPress={() => !alreadyLinked && toggleCalendar(item.id)}
+                disabled={alreadyLinked}
               >
-                {isSaving ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <ThemedText style={styles.primaryButtonText}>
-                    Sync {selected.size} Calendar{selected.size !== 1 ? 's' : ''}
-                  </ThemedText>
+                <View style={[styles.colorSwatch, { backgroundColor: item.color }]} />
+                <View style={styles.calendarInfo}>
+                  <ThemedText style={styles.calendarName}>{item.name}</ThemedText>
+                  {alreadyLinked ? (
+                    <ThemedText style={[styles.primaryBadge, { color: successColor }]}>Already synced</ThemedText>
+                  ) : item.primary ? (
+                    <ThemedText style={[styles.primaryBadge, { color: textSecondary }]}>Primary</ThemedText>
+                  ) : null}
+                </View>
+                {!alreadyLinked && (
+                  <View style={[
+                    styles.checkbox,
+                    { borderColor: isSelected ? tintColor : borderColor },
+                    isSelected && { backgroundColor: tintColor },
+                  ]}>
+                    {isSelected && <IconSymbol name="checkmark" size={12} color="#fff" />}
+                  </View>
                 )}
               </Pressable>
+            );
+          })}
 
-              {/* Disconnect */}
-              <Pressable style={styles.disconnectButton} onPress={handleDisconnect}>
-                <ThemedText style={[styles.disconnectText, { color: dangerColor }]}>
-                  Disconnect Google Calendar
+          <View style={styles.footer}>
+            <Pressable
+              style={[styles.primaryButton, { backgroundColor: tintColor }, (isSaving || selectedIds.length === 0) && styles.buttonDisabled]}
+              onPress={handleSave}
+              disabled={isSaving || selectedIds.length === 0}
+            >
+              {isSaving ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <ThemedText style={styles.primaryButtonText}>
+                  Sync {selectedIds.length} Calendar{selectedIds.length !== 1 ? 's' : ''}
                 </ThemedText>
-              </Pressable>
-            </View>
-          }
-        />
+              )}
+            </Pressable>
+          </View>
+        </ScrollView>
       )}
     </ThemedView>
   );
@@ -269,6 +338,8 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 16, fontWeight: '600', marginBottom: 4 },
   sectionSub: { fontSize: 13, lineHeight: 18 },
 
+  emptyText: { textAlign: 'center', fontSize: 14, paddingHorizontal: 20, paddingVertical: 12 },
+
   list: { paddingHorizontal: 20, paddingBottom: 24 },
   calendarRow: {
     flexDirection: 'row',
@@ -279,11 +350,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     gap: 12,
   },
-  colorSwatch: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-  },
+  rowDisabled: { opacity: 0.5 },
+  colorSwatch: { width: 14, height: 14, borderRadius: 7 },
   calendarInfo: { flex: 1 },
   calendarName: { fontSize: 15, fontWeight: '600' },
   primaryBadge: { fontSize: 12, marginTop: 1 },
@@ -296,7 +364,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  footer: { paddingTop: 8, gap: 12 },
+  footer: { paddingTop: 16, gap: 12 },
   primaryButton: {
     width: '100%',
     paddingVertical: 15,

@@ -46,11 +46,35 @@ export function getWeekDates(date: Date): Date[] {
 }
 
 /**
- * Format time as "h:mm AM/PM"
+ * Format time as "h:mm AM/PM", optionally in a specific IANA timezone.
+ * When timezone is provided, the time is shown in that timezone rather than device local time.
+ * This ensures Google Calendar events (which may be in UTC or a non-local timezone) display correctly.
  */
-export function formatTime(date: Date): string {
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
+export function formatTime(date: Date, timezone?: string): string {
+  let hours: number;
+  let minutes: number;
+
+  if (timezone) {
+    try {
+      // Format in the event's timezone using a 24-hour clock, then parse hours/minutes
+      const str = new Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).format(date); // e.g. "06:00" or "18:30"
+      const [h, m] = str.split(':').map(Number);
+      hours = h;
+      minutes = m;
+    } catch {
+      hours = date.getHours();
+      minutes = date.getMinutes();
+    }
+  } else {
+    hours = date.getHours();
+    minutes = date.getMinutes();
+  }
+
   const ampm = hours >= 12 ? 'PM' : 'AM';
   const displayHours = hours % 12 || 12;
   const displayMinutes = minutes.toString().padStart(2, '0');
@@ -61,12 +85,12 @@ export function formatTime(date: Date): string {
 /**
  * Format date range as "h:mm AM - h:mm PM" or "All Day"
  */
-export function formatDateRange(start: Date, end: Date, isAllDay: boolean): string {
+export function formatDateRange(start: Date, end: Date, isAllDay: boolean, timezone?: string): string {
   if (isAllDay) {
     return 'All Day';
   }
 
-  return `${formatTime(start)} - ${formatTime(end)}`;
+  return `${formatTime(start, timezone)} - ${formatTime(end, timezone)}`;
 }
 
 /**
@@ -120,9 +144,29 @@ export function getEventsForWeek(events: CalendarEvent[], weekStart: Date): Cale
  * Calculate top offset in pixels for an event on a time grid
  * Assumes 60px per hour, grid starts at midnight
  */
-export function getEventTopOffset(startTime: Date): number {
-  const hours = startTime.getHours();
-  const minutes = startTime.getMinutes();
+export function getEventTopOffset(startTime: Date, timezone?: string): number {
+  let hours: number;
+  let minutes: number;
+
+  if (timezone) {
+    try {
+      const str = new Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).format(startTime);
+      const [h, m] = str.split(':').map(Number);
+      hours = h;
+      minutes = m;
+    } catch {
+      hours = startTime.getHours();
+      minutes = startTime.getMinutes();
+    }
+  } else {
+    hours = startTime.getHours();
+    minutes = startTime.getMinutes();
+  }
 
   return (hours * 60) + minutes; // 1px per minute
 }

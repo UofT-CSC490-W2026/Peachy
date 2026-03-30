@@ -57,6 +57,7 @@ export function MonthDayPreview({
                 new Date(event.startTime),
                 new Date(event.endTime),
                 event.isAllDay,
+                event.timezone,
               );
 
               return (

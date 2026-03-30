@@ -65,6 +65,7 @@ export default function SettingsScreen() {
   const borderColor = useThemeColor({}, 'border');
   const textColor = useThemeColor({}, 'text');
   const textSecondary = useThemeColor({}, 'textSecondary');
+  const tintColor = useThemeColor({}, 'tint');
   const { logout } = useAuth();
   const { isLinked: gcalLinked } = useGoogleCalendar();
 
@@ -121,14 +122,14 @@ export default function SettingsScreen() {
           <Row
             icon="calendar.badge.plus"
             title="Google Calendar"
-            subtitle={gcalLinked ? 'Syncing with your Google Calendar' : 'Import and sync your Google Calendar'}
-            onPress={gcalLinked ? undefined : () => router.push('/google-calendar-link')}
-            showChevron={!gcalLinked}
+            subtitle={gcalLinked ? 'Manage your synced calendars' : 'Import and sync your Google Calendar'}
+            onPress={() => router.push('/google-calendar-link')}
+            showChevron
             right={gcalLinked ? (
-              <View style={[styles.linkedPill, { backgroundColor: textSecondary + '22', borderColor: textSecondary + '44' }]}>
-                <ThemedText style={[styles.linkedPillText, { color: textSecondary }]}>Linked</ThemedText>
-              </View>
-            ) : undefined}
+              <ThemedText style={[styles.linkedPillText, { color: textSecondary }]}>Edit</ThemedText>
+            ) : (
+              <ThemedText style={[styles.linkedPillText, { color: tintColor }]}>Link</ThemedText>
+            )}
           />
           <Row
             icon="link"

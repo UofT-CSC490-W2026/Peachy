@@ -1,4 +1,4 @@
-import { StyleSheet, ScrollView, View, Pressable, Alert, Image, ActivityIndicator } from 'react-native';
+import { StyleSheet, ScrollView, View, Pressable, Alert, Image, ActivityIndicator, TextInput } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -32,6 +32,7 @@ export default function ProfileEditScreen() {
 
   const [name, setName] = useState(user?.name ?? '');
   const [username, setUsername] = useState(user?.username ?? '');
+  const [bio, setBio] = useState(user?.bio ?? '');
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -57,11 +58,10 @@ export default function ProfileEditScreen() {
       await updateUser({
         name: name.trim(),
         username: username.trim(),
+        bio: bio.trim(),
         interests: [...selected],
       });
-      Alert.alert('Success', 'Profile updated!', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+      router.back();
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         Alert.alert('Error', 'Username already taken');
@@ -191,6 +191,24 @@ export default function ProfileEditScreen() {
             placeholder="username"
             autoCapitalize="none"
           />
+        </FormField>
+
+        {/* Bio Field */}
+        <FormField label="Bio">
+          <View style={[styles.bioInputWrap, { borderColor, backgroundColor: surfaceColor }]}>
+            <TextInput
+              value={bio}
+              onChangeText={(t) => setBio(t.slice(0, 160))}
+              placeholder="Write a short bio…"
+              placeholderTextColor={textSecondary}
+              multiline
+              maxLength={160}
+              style={[styles.bioInput, { color: textColor }]}
+            />
+            <ThemedText style={[styles.bioCounter, { color: textSecondary }]}>
+              {bio.length}/160
+            </ThemedText>
+          </View>
         </FormField>
 
         {/* Email Field (read-only) */}
@@ -327,6 +345,24 @@ const styles = StyleSheet.create({
   changePhotoText: {
     fontSize: 15,
     fontWeight: '600',
+  },
+  bioInputWrap: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 6,
+    minHeight: 80,
+  },
+  bioInput: {
+    fontSize: 15,
+    lineHeight: 21,
+    textAlignVertical: 'top',
+  },
+  bioCounter: {
+    fontSize: 11,
+    textAlign: 'right',
+    marginTop: 4,
   },
   infoBox: {
     marginTop: 16,

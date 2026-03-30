@@ -3,7 +3,11 @@ import { ActivityIndicator, View } from 'react-native';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useSegments, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as WebBrowser from 'expo-web-browser';
 import 'react-native-reanimated';
+
+// Required for expo-web-browser auth sessions to close properly on redirect
+WebBrowser.maybeCompleteAuthSession();
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { CalendarProvider } from '@/contexts/calendar-context';
@@ -125,7 +129,7 @@ function RootNavigator() {
           <Stack.Screen name="chat-detail" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="user-search" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="profile-edit" options={{ presentation: 'modal', headerShown: false }} />
-          <Stack.Screen name="settings" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="settings" options={{ presentation: 'card', headerShown: false }} />
           <Stack.Screen name="appearance" options={{ presentation: 'modal', headerShown: false }} />
               <Stack.Screen name="friends" options={{ presentation: 'modal', headerShown: false }} />
               <Stack.Screen name="interests" options={{ presentation: 'modal', headerShown: false }} />

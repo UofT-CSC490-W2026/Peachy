@@ -203,7 +203,7 @@ export function WeekView({ currentDate, events, calendars, scrollToDateToken }: 
 
                       {dayEvents.map((event) => {
                         const { start, end } = getEffectiveEventRange(event, date);
-                        const top = getEventTopOffset(start);
+                        const top = getEventTopOffset(start, event.timezone);
                         const height = getEventHeight(start, end);
                         const calColor = calendars.find((calendar) => calendar.id === event.calendarId)?.color ?? '#FF8C6B';
 

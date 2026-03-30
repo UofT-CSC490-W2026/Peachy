@@ -21,7 +21,9 @@ interface GoogleCalendarContextType {
   /** Fetch the user's Google Calendar list (requires prior link). */
   listCalendars: () => Promise<GoogleCalendarItem[]>;
   /** Create Peachy calendars for the chosen Google calendars and start sync. */
-  selectCalendars: (calendarIds: string[]) => Promise<void>;
+  selectCalendars: (calendars: Array<{ id: string; name: string; color: string }>) => Promise<void>;
+  /** Delete a single Peachy calendar that was synced from Google. */
+  unlinkCalendar: (peachyCalendarId: string) => Promise<void>;
   /** Revoke Google access and remove all synced data. */
   disconnect: () => Promise<void>;
 }
@@ -52,6 +54,8 @@ export function GoogleCalendarProvider({ children }: { children: ReactNode }) {
       const scheme = (Constants.expoConfig?.scheme as string) ?? 'peachy-dev';
       const redirectUrl = `${scheme}://google-calendar-linked`;
 
+      // Dismiss any lingering auth session before opening a new one
+      WebBrowser.dismissAuthSession();
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
 
       if (result.type === 'success') {
@@ -75,11 +79,14 @@ export function GoogleCalendarProvider({ children }: { children: ReactNode }) {
     return data.calendars;
   }, [getIdToken]);
 
-  const selectCalendars = useCallback(async (calendarIds: string[]): Promise<void> => {
-    await apiClient.post('/google-calendar/calendars', { calendarIds });
-    // Refresh user profile in case backend updates GoogleCalendarLinked
+  const selectCalendars = useCallback(async (calendars: Array<{ id: string; name: string; color: string }>): Promise<void> => {
+    await apiClient.post('/google-calendar/calendars', { calendars });
     await fetchProfile();
   }, [getIdToken, fetchProfile]);
+
+  const unlinkCalendar = useCallback(async (peachyCalendarId: string): Promise<void> => {
+    await apiClient.del(`/calendars/${peachyCalendarId}`);
+  }, [getIdToken]);
 
   const disconnect = useCallback(async (): Promise<void> => {
     await apiClient.del('/google-calendar/link');
@@ -94,6 +101,7 @@ export function GoogleCalendarProvider({ children }: { children: ReactNode }) {
       startLink,
       listCalendars,
       selectCalendars,
+      unlinkCalendar,
       disconnect,
     }}>
       {children}
