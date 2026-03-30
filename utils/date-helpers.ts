@@ -64,7 +64,8 @@ export function formatTime(date: Date, timezone?: string): string {
         hour12: false,
       }).format(date); // e.g. "06:00" or "18:30"
       const [h, m] = str.split(':').map(Number);
-      hours = h;
+      // Some Intl implementations can emit "24" for midnight; normalize to 0-23.
+      hours = h % 24;
       minutes = m;
     } catch {
       hours = date.getHours();
@@ -157,7 +158,8 @@ export function getEventTopOffset(startTime: Date, timezone?: string): number {
         hour12: false,
       }).format(startTime);
       const [h, m] = str.split(':').map(Number);
-      hours = h;
+      // Keep timezone-derived hours in 0-23 even if Intl emits 24 for midnight.
+      hours = h % 24;
       minutes = m;
     } catch {
       hours = startTime.getHours();
