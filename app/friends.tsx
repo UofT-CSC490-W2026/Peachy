@@ -45,7 +45,10 @@ export default function FriendsScreen() {
   };
 
   const renderFriend = ({ item }: { item: Friend }) => (
-    <View style={[styles.friendItem, { backgroundColor: surfaceColor, borderColor }]}>
+    <Pressable
+      style={[styles.friendItem, { backgroundColor: surfaceColor, borderColor }]}
+      onPress={() => router.push({ pathname: '/friend-profile', params: { userId: item.userId } })}
+    >
       <View style={[styles.avatar, { backgroundColor: tintColor + '20' }]}>
         <ThemedText style={[styles.avatarText, { color: tintColor }]}>
           {item.name.charAt(0).toUpperCase()}
@@ -63,7 +66,7 @@ export default function FriendsScreen() {
       >
         <ThemedText style={[styles.removeText, { color: dangerColor }]}>Remove</ThemedText>
       </Pressable>
-    </View>
+    </Pressable>
   );
 
   return (

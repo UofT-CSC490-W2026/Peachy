@@ -6,6 +6,7 @@ import { ThemedView } from '@/components/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useAuth } from '@/contexts/auth-context';
 import { useFriends } from '@/contexts/friends-context';
+import { useCalendar } from '@/contexts/calendar-context';
 import { INTEREST_CATEGORIES } from '@/constants/interests';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
@@ -18,6 +19,12 @@ export default function ProfileScreen() {
   const tintColor = useThemeColor({}, 'tint');
   const { user, fetchProfile } = useAuth();
   const { friends } = useFriends();
+  const { calendars } = useCalendar();
+
+  const sharedCalendarCount = useMemo(
+    () => calendars.filter(c => c.type === 'shared').length,
+    [calendars],
+  );
 
   // Derive selected interests directly from context — always in sync after save
   const selected = useMemo(() => new Set(user?.interests ?? []), [user?.interests]);
@@ -89,12 +96,19 @@ export default function ProfileScreen() {
             </View>
           )}
 
-          <Pressable style={styles.statsRow} onPress={() => router.push('/friends')}>
-            <View style={styles.statItem}>
+          <View style={styles.statsRow}>
+            <Pressable style={styles.statItem} onPress={() => router.push('/friends')}>
               <ThemedText style={styles.statNumber}>{friends.length}</ThemedText>
               <ThemedText style={[styles.statLabel, { color: textSecondary }]}>friends</ThemedText>
+            </Pressable>
+            <View style={[styles.statDivider, { backgroundColor: borderColor }]} />
+            <View style={styles.statItem}>
+              <ThemedText style={styles.statNumber}>{sharedCalendarCount}</ThemedText>
+              <ThemedText style={[styles.statLabel, { color: textSecondary }]}>
+                shared {sharedCalendarCount === 1 ? 'calendar' : 'calendars'}
+              </ThemedText>
             </View>
-          </Pressable>
+          </View>
         </View>
 
         {/* Name */}
@@ -196,6 +210,7 @@ const styles = StyleSheet.create({
     gap: 24,
   },
   statItem: { alignItems: 'center', gap: 2 },
+  statDivider: { width: 1, height: 28, borderRadius: 0.5 },
   statNumber: { fontSize: 16, fontWeight: '700' },
   statLabel: { fontSize: 11 },
   name: { fontSize: 14, fontWeight: '600', marginBottom: 6 },

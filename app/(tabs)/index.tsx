@@ -7,6 +7,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useCalendar } from '@/contexts/calendar-context';
 import { useAuth } from '@/contexts/auth-context';
+import { useFriends } from '@/contexts/friends-context';
 import { UpcomingEvents } from '@/components/calendar/upcoming-events';
 import { PendingItems } from '@/components/pending-items';
 
@@ -14,6 +15,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { calendars, visibleEvents, pendingItems, acceptPendingItem, declinePendingItem, refreshCalendars, refreshPendingItems } = useCalendar();
   const { user } = useAuth();
+  const { refreshFriends } = useFriends();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const tintColor = useThemeColor({}, 'tint');
   const borderColor = useThemeColor({}, 'border');
@@ -33,6 +35,9 @@ export default function HomeScreen() {
 
     try {
       await acceptPendingItem(itemId, item.sk, calendarId);
+      if (item.type === 'friend_request') {
+        refreshFriends();
+      }
     } catch {
       Alert.alert('Error', 'Failed to accept invitation. Please try again.');
     }

@@ -128,14 +128,16 @@ function RootNavigator() {
           <Stack.Screen name="calendar-create" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="calendar-settings" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="chat-detail" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="chat-members" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="user-search" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="profile-edit" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="settings" options={{ presentation: 'card', headerShown: false }} />
           <Stack.Screen name="appearance" options={{ presentation: 'modal', headerShown: false }} />
-              <Stack.Screen name="friends" options={{ presentation: 'modal', headerShown: false }} />
-              <Stack.Screen name="interests" options={{ presentation: 'modal', headerShown: false }} />
-              <Stack.Screen name="google-calendar-prompt" options={{ presentation: 'modal', headerShown: false }} />
-              <Stack.Screen name="google-calendar-link" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="friends" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="friend-profile" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="interests" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="google-calendar-prompt" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="google-calendar-link" options={{ presentation: 'modal', headerShown: false }} />
             </Stack>
             <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
           </ThemeProvider>
