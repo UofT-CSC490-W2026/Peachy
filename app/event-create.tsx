@@ -14,16 +14,19 @@ import { AvailabilityViewer } from '@/components/availability-viewer';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useCalendar } from '@/contexts/calendar-context';
 import { useAuth } from '@/contexts/auth-context';
-import { AuthError } from '@/utils/api-client';
+import { AuthError, createApiClient } from '@/utils/api-client';
 import { getSlotIndex } from '@/utils/rl-helpers';
+import type { Calendar } from '@/types';
 export default function EventCreateScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { calendars, createEvent, getUser, fetchUser } = useCalendar();
   const { user, getIdToken, logout } = useAuth();
+    const apiClient = useMemo(() => createApiClient(getIdToken), [getIdToken]);
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
+  const dangerColor = useThemeColor({}, 'danger');
 
   // Check if AI-generated
   const isAIGenerated = params.aiGenerated === 'true';
@@ -60,6 +63,7 @@ export default function EventCreateScreen() {
   const [description, setDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [inviteeDisplayNames, setInviteeDisplayNames] = useState<Record<string, string>>({});
+  const [calendarMemberIds, setCalendarMemberIds] = useState<string[] | null>(null);
   const [invitedUserIds, setInvitedUserIds] = useState<string[]>(() => {
     if (params.inviteeIds) {
       const ids = (params.inviteeIds as string).split(',').filter(id => id.trim());
@@ -113,6 +117,31 @@ export default function EventCreateScreen() {
       }
     }
   }, [params.selectedUsers]);
+
+  useEffect(() => {
+    if (!selectedCalendar || selectedCalendar.type !== 'shared') {
+      setCalendarMemberIds(null);
+      return;
+    }
+    let isActive = true;
+    apiClient.get<Calendar>(`calendars/${selectedCalendar.id}`)
+      .then(cal => {
+        if (isActive) setCalendarMemberIds(cal.memberIds ?? []);
+      })
+      .catch(() => {
+        if (isActive) setCalendarMemberIds(null);
+      });
+    return () => { isActive = false; };
+  }, [apiClient, selectedCalendar?.id, selectedCalendar?.type]);
+
+  const memberInviteeNames = useMemo(() => {
+    if (!selectedCalendar) return [] as string[];
+    const memberIdsSource = calendarMemberIds ?? selectedCalendar.memberIds ?? [];
+    const memberIds = new Set(memberIdsSource);
+    return invitedUserIds
+      .filter(id => memberIds.has(id))
+      .map(id => getUser(id)?.name ?? inviteeDisplayNames[id] ?? id);
+  }, [invitedUserIds, selectedCalendar, calendarMemberIds, inviteeDisplayNames, getUser]);
 
   const handleSave = async () => {
     if (!hasOwnedCalendars) {
@@ -324,6 +353,14 @@ export default function EventCreateScreen() {
               })}
             </View>
           )}
+
+          {memberInviteeNames.length > 0 && (
+            <View style={[styles.warningCard, { borderColor: dangerColor, backgroundColor: dangerColor + '10' }]}>
+              <ThemedText style={[styles.warningText, { color: dangerColor }]}>
+                Already members (no invite needed): {memberInviteeNames.join(', ')}
+              </ThemedText>
+            </View>
+          )}
         </FormField>
 
         {/* Availability Checker */}
@@ -484,6 +521,16 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginTop: 12,
+  },
+  warningCard: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  warningText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   inviteeChip: {
     flexDirection: 'row',
