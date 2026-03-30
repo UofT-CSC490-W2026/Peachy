@@ -1,5 +1,8 @@
 # Peachy: Intelligent Mobile Calendar with Shared Scheduling and Messaging
 
+> [!NOTE]
+> Due to circumstances outside of our control (AWS account quota issues, credits being used up by another team), we were blocked on Bedrock integration for the majority of the term. Therefore, we have had little time to test and refine portions of our solution relying on Bedrock output.
+
 **Team:** Yibing Ju (1009382829), Cynthia Zhou (1009028918), Jonathan Chen (1008849310), Mark Noge (1008992299)
 
 ---
@@ -161,13 +164,40 @@ Test categories: positive (happy path field population), regression (each of the
 
 **Bug discovered during testing:** `analyzeInput()` checked for an explicit time before checking for @mentions. Inputs like "dinner with @brian at 8pm" had exactly 1 explicit time, triggering the fast-path early return and silently dropping the friend from `invitedUserIds`. Fixed by moving the @mention check above the explicit-time check.
 
-### 4.4 Two Memorable Bugs
+### 4.4 Model Evaluation
+
+The current AI scheduling pipeline and Bedrock model choices were evaluated using a framework that tests 22 sample use cases across 7 categories. Outputs are scored across 6 weighted dimensions, in addition to other performance metrics including latency and cost.
+
+| Category | Workflow path | Number of cases |
+|----------|---------------|-----------------|
+| Explicit time | fast-path | 5 |
+| Vague date | smart-path | 4 |
+| Day-name resolution | smart-path | 4 |
+| Late night | fast-path | 3 |
+| Conflict snapping | smart-path | 2 |
+| @Mentions | smart-path | 2 |
+| Edge cases | N/A | 2 |
+
+| Dimension | Weight | Pass condition |
+|-----------|--------|----------------|
+| `dayCorrect` | 0.25 | Local day-of-week matches `expectedDay` |
+| `futureDate` | 0.20 | `startTime` is after `frozenNow` |
+| `hourInRange` | 0.20 | Local hour within `expectedHourRange` |
+| `endAfterStart` | 0.15 | `endTime > startTime` |
+| `notAdjusted` | 0.15 | `validateEventTiming` did not need to correct the output (inverted when `expectAdjusted: true`) |
+| `titleNonEmpty` | 0.05 | `title.trim().length > 0` |
+
+Vertical testing revealed that upgrading model families (fast path: Haiku to Sonnet, smart path: Sonnet to Opus) provided similar output quality (-0.01 in cumulative score) while resulting in >118% increase in latency and incurring >76% increase in cost (see Appendix A).
+
+We also compared the production prompt against a 2-shot prompt variant (`nshot`) using the same 22-case suite (2026-03-30). The `nshot` variant improved average score and significantly reduced safety-net corrections, at the cost of higher input tokens and overall cost (see Appendix B).
+
+### 4.5 Two Memorable Bugs
 
 **Bug 1 — Dark mode display.** Black text on dark backgrounds; hard-coded color values instead of theme-aware calls. Two developers independently hit this when generating code with Claude — indicating a systemic gap in shared AI context, not a one-off mistake. Fixed with `useThemeColor()` and `<ThemedText>`/`<ThemedView>` wrappers; CLAUDE.md updated with theming guidance; unit tests added to verify stylesheet color sourcing.
 
 **Bug 2 — AI parse timezone mismatch.** Three failure categories: time mismatch, day mismatch, scheduling conflicts. The Lambda runs UTC; users are in local time (EDT = UTC-4). The timezone was threaded into `callBedrock()` for prompt formatting but not into `parseDateHint()` (which used `new Date()` = UTC) or `validateEventTiming()` (which used `getUTCHours()`). Additionally, Bedrock returned wrong-day dates and ignored calendar conflicts. Fixed by threading timezone consistently through all date functions and adding the 7-step `validateEventTiming` correction pipeline. **Lesson:** prior tests were UTC-only, masking the issue entirely; never trust LLM temporal output without deterministic validation.
 
-### 4.5 Performance Targets
+### 4.6 Performance Targets
 
 | Target | Goal | Status |
 |--------|------|--------|
@@ -181,7 +211,7 @@ Test categories: positive (happy path field population), regression (each of the
 ## 5. Future Work and Next Steps
 
 - **Backend completion:** Chat polling (5s interval when open), profile photo upload via S3 presigned URLs, remaining invitation management endpoints.
-- **AI pipeline:** End-to-end Bedrock integration; follow-up dialog for ambiguous inputs; A/B test Claude Haiku vs Sonnet using `AiEditedFields` edit-rate signal.
+- **AI pipeline:** Follow-up dialog for ambiguous inputs; A/B test Claude Haiku vs Sonnet using `AiEditedFields` edit-rate signal; evals using established tools such as Langfuse for programmatic comparisons of prompt variants.
 - **Offline storage:** Local persistence layer (SQLite or AsyncStorage) with conflict resolution.
 - **Email:** Real domain + DNS (DKIM, SPF, DMARC), SES production access, welcome/reset/invite email templates.
 - **Security:** Migrate Google OAuth secret to Secrets Manager; add Bedrock Guardrails; add CloudWatch alarms (Lambda errors, API Gateway 5xx, DynamoDB throttles).
@@ -197,9 +227,13 @@ The most concrete course connection was the data pipeline work. We defined aspir
 
 The profiling exercise reinforced a principle that applies broadly: measure before optimizing. The dominant bottleneck was `Intl.DateTimeFormat` construction — a 66–74x timezone overhead that was invisible until we mocked I/O to isolate CPU. Without profiling, we would have optimized the wrong things.
 
-Infrastructure as a first-class artifact was a third key theme. Defining CDK stacks early forced decisions about permissions, data lifecycle, and operational constraints before they became blocking problems. The disaster recovery exercise — destroying and recovering a production environment from RETAIN orphans — is the kind of operational practice rarely addressed in coursework but essential in production systems.
+Infrastructure as a first-class artifact was a third key theme. Defining CDK stacks early forced decisions about permissions, data lifecycle, and operational constraints before they became blocking problems. In particular, discussions on the cost and latency of different services with respect to different use cases encouraged us to consider our infrastructure decisions in greater detail. The disaster recovery exercise — destroying and recovering a production environment from RETAIN orphans — is the kind of operational practice rarely addressed in coursework but essential in production systems.
+
+Additionally, course discussion on the importance of LLM evals directly influenced our eval framework, decoupling evaluation from deployment and operationalizing the cost/quality tradeoff explicitly. Distinguishing between correct model output and output bailed out by the safety net allows us to improve our model pipeline with confidence.
 
 Finally, the dark mode bug taught us something about AI-assisted development: Claude produces consistent code only when given consistent context. Updating CLAUDE.md with architectural decisions and code patterns reduced inter-developer inconsistency more effectively than code review alone. Maintaining a shared AI context file is a new kind of team practice that emerged directly from this project.
+
+In conclusion, Peachy demonstrates that integrated scheduling, shared calendars, and messaging can be delivered with strong reliability and performance when paired with deterministic validation and disciplined evaluation. The project validated our architectural choices, highlighted the cost-quality tradeoffs of model selection, and established a foundation for iterative improvement.
 
 ---
 
@@ -219,3 +253,46 @@ Finally, the dark mode bug taught us something about AI-assisted development: Cl
 - Peachy A1 — Landscape Analysis and Project Proposal (2026). Internal course report.
 - Peachy A2 — Aspirational Datasets, Data Pipeline, and IaC Implementation (2026). Internal course report.
 - Peachy A5 — Profiling, Coverage, and Memorable Bugs (2026). Internal course report.
+
+## Appendix A. Evaluation Results for Different Bedrock Model Choices
+
+A. Fast path - Haiku, Smart path - Sonnet
+B. Fast path - Sonnet, Smart path - Opus
+
+| case | A.score | B.score | Δscore | A.ms | B.ms | Δms | A.cost | B.cost | Δcost |
+|---|---|---|---|---|---|---|---|---|---|
+| *explicit-1 | 0.75 | 0.60 | -0.15 | 3909 | 6350 | +2441 | $0.0032 | $0.0117 | +$0.0085 |
+| explicit-2 | 0.85 | 0.85 | +0.00 | 3253 | 5976 | +2723 | $0.0036 | $0.0116 | +$0.0080 |
+| explicit-3 | 0.81 | 0.81 | +0.00 | 3613 | 7186 | +3573 | $0.0038 | $0.0120 | +$0.0081 |
+| explicit-4 | 0.75 | 0.75 | +0.00 | 2654 | 5250 | +2596 | $0.0034 | $0.0114 | +$0.0081 |
+| *explicit-5 | 1.00 | 0.85 | -0.15 | 2740 | 6637 | +3897 | $0.0034 | $0.0113 | +$0.0080 |
+| vague-1 | 1.00 | 1.00 | +0.00 | 7684 | 6928 | -756 | $0.0123 | $0.0178 | +$0.0055 |
+| vague-2 | 1.00 | 1.00 | +0.00 | 7905 | 7876 | -29 | $0.0124 | $0.0190 | +$0.0065 |
+| vague-3 | 1.00 | 1.00 | +0.00 | 7405 | 35851 | +28446 | $0.0125 | $0.0185 | +$0.0060 |
+| vague-4 | 1.00 | 1.00 | +0.00 | 6997 | 51849 | +44852 | $0.0120 | $0.0178 | +$0.0058 |
+| dayname-1 | 1.00 | 1.00 | +0.00 | 6790 | 7054 | +264 | $0.0122 | $0.0179 | +$0.0058 |
+| dayname-2 | 1.00 | 1.00 | +0.00 | 7223 | 19912 | +12689 | $0.0118 | $0.0176 | +$0.0058 |
+| dayname-3 | 1.00 | 1.00 | +0.00 | 6402 | 5843 | -559 | $0.0117 | $0.0172 | +$0.0055 |
+| *dayname-4 | 0.85 | 1.00 | +0.15 | 7315 | 13276 | +5961 | $0.0116 | $0.0164 | +$0.0048 |
+| *latenight-1 | 1.00 | 0.85 | -0.15 | 3823 | 6468 | +2645 | $0.0042 | $0.0115 | +$0.0073 |
+| latenight-2 | 1.00 | 1.00 | +0.00 | 5676 | 7035 | +1359 | $0.0039 | $0.0119 | +$0.0080 |
+| *latenight-3 | 0.85 | 0.65 | -0.20 | 4172 | 6864 | +2692 | $0.0042 | $0.0118 | +$0.0076 |
+| *conflict-1 | 0.50 | 0.69 | +0.19 | 7450 | 21021 | +13571 | $0.0118 | $0.0163 | +$0.0045 |
+| conflict-2 | 0.60 | 0.60 | +0.00 | 7624 | 7245 | -379 | $0.0119 | $0.0140 | +$0.0021 |
+| mentions-1 | 1.00 | 1.00 | +0.00 | 6561 | 30860 | +24299 | $0.0115 | $0.0173 | +$0.0058 |
+| *mentions-2 | 0.73 | 1.00 | +0.27 | 6142 | 16620 | +10478 | $0.0116 | $0.0186 | +$0.0070 |
+| *edge-1 | 1.00 | 0.73 | -0.27 | 14931 | 5965 | -8966 | $0.0116 | $0.0176 | +$0.0060 |
+| edge-2 | 0.80 | 0.80 | +0.00 | 2135 | 7826 | +5691 | $0.0027 | $0.0135 | +$0.0108 |
+| **MEAN** | **0.89** | **0.87** | **-0.01** | **6018** | **13177** | **+7159** | **$0.1873** | **$0.3326** | **+$0.145** |
+
+## Appendix B. N-shot Prompt Evaluation Summary
+
+| Metric | baseline | nshot | Δ |
+|--------|----------|-------|---|
+| Avg score | 0.88 | 0.91 | +0.03 |
+| Pass rate (>= 0.80) | 16/22 (72.7%) | 16/22 (72.7%) | - |
+| `validateEventTiming` fired | 7/22 (31.8%) | 3/22 (13.6%) | -18pp |
+| Avg latency | 6735ms | 5476ms | -1259ms |
+| Avg input tokens | 1355 | 2689 | +1334 |
+| Total cost (22 cases) | $0.187 | $0.233 | +$0.046 |
+| Monthly projection @ 1000/day | $255/mo | $318/mo | +$63/mo |
