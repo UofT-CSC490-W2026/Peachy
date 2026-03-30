@@ -1,6 +1,6 @@
 import { StyleSheet, View, FlatList, TextInput, Pressable, KeyboardAvoidingView, Platform, Alert, Keyboard, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -8,6 +8,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useChat } from '@/contexts/chat-context';
 import { useAuth } from '@/contexts/auth-context';
+import { useCalendar } from '@/contexts/calendar-context';
 import { ChatMessage } from '@/types';
 
 export default function ChatDetailScreen() {
@@ -16,10 +17,15 @@ export default function ChatDetailScreen() {
   const chatId = params.id as string || '';
   const chatName = params.name as string || 'Chat';
   const chatType = params.type as string || 'direct';
+  const calendarId = params.calendarId as string || '';
 
   const { getChatMessages, sendMessage, markChatRead, acceptMessageRequest, messageRequests } = useChat();
   const { user } = useAuth();
+  const { fetchUser, getUser } = useCalendar();
   const currentUserId = user?.id || '';
+
+  const [senderNames, setSenderNames] = useState<Record<string, string>>({});
+  const resolvedIdsRef = useRef<Set<string>>(new Set());
 
   const insets = useSafeAreaInsets();
   const tintColor = useThemeColor({}, 'tint');
@@ -53,6 +59,30 @@ export default function ChatDetailScreen() {
     loadMessages();
     markChatRead(chatId);
   }, [chatId, loadMessages, markChatRead, router]);
+
+  // Resolve sender IDs to display names
+  useEffect(() => {
+    const unknownIds = messages
+      .map(m => m.senderId)
+      .filter(id => id && id !== currentUserId && !resolvedIdsRef.current.has(id));
+    const uniqueIds = [...new Set(unknownIds)];
+    if (uniqueIds.length === 0) return;
+
+    uniqueIds.forEach(id => resolvedIdsRef.current.add(id));
+
+    Promise.all(uniqueIds.map(async id => {
+      const cached = getUser(id);
+      if (cached) return { id, name: cached.name };
+      const fetched = await fetchUser(id);
+      return { id, name: fetched?.name || id };
+    })).then(results => {
+      setSenderNames(prev => {
+        const next = { ...prev };
+        for (const r of results) next[r.id] = r.name;
+        return next;
+      });
+    });
+  }, [messages, currentUserId, fetchUser, getUser]);
 
   // Polling for new messages
   useEffect(() => {
@@ -202,7 +232,7 @@ export default function ChatDetailScreen() {
       <View style={[styles.messageContainer, isCurrentUser && styles.messageContainerRight]}>
         {showHeader && !isCurrentUser && chatType === 'calendar_group' && (
           <ThemedText style={[styles.senderName, { color: textSecondary }]}>
-            {item.senderId}
+            {senderNames[item.senderId] || item.senderId}
           </ThemedText>
         )}
         <View
@@ -234,11 +264,18 @@ export default function ChatDetailScreen() {
     );
   };
 
-  const handleAddPeople = () => {
-    router.push({
-      pathname: '/user-search',
-      params: { mode: 'chat', chatId },
-    });
+  const handlePeoplePress = () => {
+    if (chatType === 'calendar_group' && calendarId) {
+      router.push({
+        pathname: '/chat-members',
+        params: { calendarId },
+      });
+    } else {
+      router.push({
+        pathname: '/user-search',
+        params: { mode: 'chat', chatId },
+      });
+    }
   };
 
   return (
@@ -268,7 +305,7 @@ export default function ChatDetailScreen() {
               </ThemedText>
             )}
           </View>
-          <Pressable onPress={handleAddPeople} style={styles.addPeopleButton}>
+          <Pressable onPress={handlePeoplePress} style={styles.addPeopleButton}>
             <IconSymbol name="person.2" size={24} color={tintColor} />
           </Pressable>
         </View>

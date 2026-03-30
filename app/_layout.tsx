@@ -128,6 +128,7 @@ function RootNavigator() {
           <Stack.Screen name="calendar-create" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="calendar-settings" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="chat-detail" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="chat-members" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="user-search" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="profile-edit" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="settings" options={{ presentation: 'card', headerShown: false }} />

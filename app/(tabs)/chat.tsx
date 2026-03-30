@@ -48,7 +48,7 @@ export default function ChatScreen() {
         onPress={() => {
           router.push({
             pathname: '/chat-detail',
-            params: { id: item.id, name: item.name, type: item.type },
+            params: { id: item.id, name: item.name, type: item.type, calendarId: item.calendarId || '' },
           });
         }}
       >
