@@ -51,20 +51,37 @@ npm run web:prod
 ```
 Peachy/
 ├── app/                          # Expo Router (file-based routing)
+│   ├── (auth)/                   # Auth flow screens
+│   │   ├── _layout.tsx           # Auth layout
+│   │   ├── login.tsx             # Login screen
+│   │   ├── signup.tsx            # Sign up screen
+│   │   ├── forgot-password.tsx   # Password reset
+│   │   ├── verify.tsx            # Email verification
+│   │   └── welcome.tsx           # Welcome / onboarding
 │   ├── (tabs)/                   # Bottom tab navigator
 │   │   ├── index.tsx             # Home: Pending items + upcoming events
 │   │   ├── calendars.tsx         # Calendars: Grid views + management
 │   │   ├── chat.tsx              # Chat: Conversations list
 │   │   └── profile.tsx           # Profile: Settings
 │   ├── _layout.tsx               # Root layout (providers, navigation)
-│   ├── event-create.tsx          # Modal: Create event
-│   ├── event-detail.tsx          # Modal: View event
-│   ├── event-edit.tsx            # Modal: Edit event
+│   ├── ai-chat.tsx               # Modal: AI chat conversation
+│   ├── appearance.tsx            # Modal: Appearance settings
+│   ├── callback.tsx              # OAuth callback handler
 │   ├── calendar-create.tsx       # Modal: Create calendar
 │   ├── calendar-settings.tsx     # Modal: Manage calendar
 │   ├── chat-detail.tsx           # Modal: Chat conversation
-│   ├── user-search.tsx           # Modal: Search users
-│   └── profile-edit.tsx          # Modal: Edit profile
+│   ├── chat-members.tsx          # Modal: Chat member list
+│   ├── event-create.tsx          # Modal: Create event
+│   ├── event-detail.tsx          # Modal: View event
+│   ├── event-edit.tsx            # Modal: Edit event
+│   ├── friend-profile.tsx        # Modal: View friend profile
+│   ├── friends.tsx               # Modal: Friends list
+│   ├── google-calendar-link.tsx  # Modal: Link Google Calendar
+│   ├── google-calendar-prompt.tsx# Modal: Google Calendar prompt
+│   ├── interests.tsx             # Modal: User interests selection
+│   ├── profile-edit.tsx          # Modal: Edit profile
+│   ├── settings.tsx              # Modal: App settings
+│   └── user-search.tsx           # Modal: Search users
 │
 ├── components/
 │   ├── calendar/                 # 13 calendar components
@@ -75,13 +92,16 @@ Peachy/
 │   │   ├── event-block.tsx       # Positioned event on grid
 │   │   ├── event-card.tsx        # Event card for lists
 │   │   └── ...                   # 7 more calendar components
+│   ├── auth/                     # Auth components
+│   │   └── auth-button.tsx       # Themed auth button
 │   ├── form/                     # 5 form components
 │   │   ├── form-text-input.tsx
 │   │   ├── form-switch-row.tsx
 │   │   └── ...
 │   ├── ui/                       # UI primitives
 │   │   ├── icon-symbol.tsx       # Cross-platform icons
-│   │   └── icon-symbol.ios.tsx   # SF Symbols (iOS)
+│   │   ├── icon-symbol.ios.tsx   # SF Symbols (iOS)
+│   │   └── tab-icons.tsx         # Custom tab bar icons
 │   ├── themed-text.tsx           # Theme-aware text
 │   ├── themed-view.tsx           # Theme-aware view
 │   ├── pending-items.tsx         # Pending invitations
@@ -89,7 +109,12 @@ Peachy/
 │   └── ai-input-bar.tsx          # AI scheduling input
 │
 ├── contexts/
-│   └── calendar-context.tsx      # React Context (temporary state)
+│   ├── auth-context.tsx          # Cognito authentication state
+│   ├── calendar-context.tsx      # Calendar, events, pending items state
+│   ├── chat-context.tsx          # Chat conversations state
+│   ├── friends-context.tsx       # Friends list state
+│   ├── google-calendar-context.tsx # Google Calendar sync state
+│   └── theme-context.tsx         # Light/dark theme state
 │
 ├── types/
 │   ├── calendar.ts               # Calendar, CalendarType
@@ -97,20 +122,32 @@ Peachy/
 │   ├── user.ts                   # User, RlPreferences
 │   ├── chat.ts                   # Chat, ChatMessage
 │   ├── pending.ts                # PendingItem
+│   ├── friend.ts                 # Friend
 │   └── index.ts                  # Barrel export
 │
 ├── utils/
+│   ├── ai-parser.ts              # AI response type definitions
+│   ├── api-client.ts             # REST API client with JWT auth
+│   ├── audio-transcribe.ts       # Voice recording + backend transcription
+│   ├── calendar-helpers.ts       # Calendar color mapping
 │   ├── date-helpers.ts           # 16+ date utility functions
-│   └── calendar-helpers.ts       # Calendar color mapping
+│   ├── notifications.ts          # Push notification registration
+│   ├── rl-helpers.ts             # Thompson Sampling utilities
+│   └── validation.ts             # Form validation (email, password, etc.)
 │
 ├── data/
 │   └── mock-data.ts              # Mock users, events, calendars, chats
 │
 ├── constants/
+│   ├── auth.ts                   # Auth validation constants
+│   ├── interests.ts              # User interests list
 │   └── theme.ts                  # Peachy pink palette + fonts
 │
 ├── hooks/
 │   ├── use-color-scheme.ts       # Theme detection
+│   ├── use-color-scheme.web.ts   # Web-specific with hydration
+│   ├── use-countdown.ts          # Countdown timer hook
+│   ├── use-interests.ts          # Interests selection state
 │   └── use-theme-color.ts        # Color resolver
 │
 ├── config/
@@ -120,10 +157,13 @@ Peachy/
 │
 ├── __tests__/                    # Jest test files
 │   ├── components/               # Component tests
+│   ├── hooks/                    # Hook tests
 │   ├── utils/                    # Utility unit tests
 │   ├── test-utils.tsx            # Shared renderWithProviders() helper
 │   └── tsconfig.json             # Jest type declarations
 ├── __mocks__/                    # Jest manual mocks
+│   ├── expo-av.tsx               # Stub for Audio module
+│   ├── expo-constants.ts         # Stub for Constants module
 │   ├── expo-symbols.tsx          # Stub for SF Symbols native module
 │   └── icon-symbol.tsx           # Stub for IconSymbol component
 │
@@ -152,15 +192,18 @@ Peachy/
 - **Styling:** React Native StyleSheet (peachy pink theme)
 - **State:** React Context (temporary - production library TBD)
 - **Animations:** react-native-reanimated
-- **Backend:** AWS Serverless (Lambda, DynamoDB, API Gateway, Cognito, ca-central-1 region) - **not yet implemented**
-- **AI:** AWS Bedrock (Claude Haiku 4.5 + Sonnet 4.5) - **not yet implemented**
+- **Auth:** AWS Cognito (signup, login, password reset, email verification)
+- **Backend:** AWS Serverless (Lambda, DynamoDB, API Gateway, Cognito, ca-central-1 region)
+- **AI:** AWS Bedrock (Claude Haiku 4.5 + Sonnet 4.5) — natural-language scheduling with RL feedback
 - **Environments:** Dev/prod configuration with separate bundle IDs for side-by-side installation
 
 ## Current Status
 
-**Frontend:** ✅ Complete UI with all screens, calendar views, event management, chat, and peachy pink theme
-**Backend:** ✅ AWS Serverless infrastructure deployed (Lambda, DynamoDB, API Gateway, Cognito — ca-central-1)
-**AI:**  ✅ AWS Bedrock integration implemented (natural-language scheduling via Claude Haiku/Sonnet)
+**Frontend:** Complete UI with all screens, calendar views, event management, chat, auth flow, and peachy pink theme
+**Backend:** AWS Serverless infrastructure deployed (Lambda, DynamoDB, API Gateway, Cognito — ca-central-1). Backend integration in progress — pending items, calendar members, and push notifications connected to real API.
+**Auth:** Cognito-based auth screens (login, signup, forgot-password, verify, welcome) with JWT token management
+**AI:** AWS Bedrock integration done — natural-language scheduling (text + voice input), direct AI event creation, RL feedback via Thompson Sampling
+**Google Calendar:** OAuth flow and calendar sync screens implemented
 
 ## Environment Setup
 
