@@ -9,7 +9,7 @@
 
 ## Abstract
 
-Peachy is an intelligent mobile calendar that unifies natural-language scheduling, shared calendars, and in-app messaging into a single workflow. The system combines a React Native (Expo) client with a serverless AWS backend (Lambda, API Gateway, DynamoDB, Cognito, S3) and a hybrid AI pipeline using LLM tool-calling for intent parsing and Thompson sampling for time-slot preference learning. The current implementation includes full mobile UI flows, a typed API client, Cognito-based auth, push notifications, and a CDK-defined backend with calendar, event, chat, pending-invite, friends, RL-preferences, and transcription endpoints. Frontend test coverage is 98.47% statements / 99.44% lines; backend coverage is 92.7% statements / 93.47% lines. Profiling five critical Lambda functions yielded 54–96% CPU improvements. This report covers the problem, design, experiments, and results.
+Peachy is an intelligent mobile calendar that unifies natural-language scheduling, shared calendars, and in-app messaging into a single workflow. The system combines a React Native (Expo) client with a serverless AWS backend (Lambda, API Gateway, DynamoDB, Cognito, S3) and a hybrid AI pipeline using LLM tool-calling for intent parsing and Thompson sampling for time-slot preference learning. The current implementation includes full mobile UI flows, a typed API client, Cognito-based auth, push notifications, and a CDK-defined backend with calendar, event, chat, pending-invite, friends, RL-preferences, and transcription endpoints. This report covers the problem, design, experiments, and results.
 
 ---
 
