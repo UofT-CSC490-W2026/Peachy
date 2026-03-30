@@ -104,7 +104,7 @@ A `analyzeInput()` decision function routes each request to one of two paths:
 
 **Disaster recovery:** With RETAIN policies, a full stack destruction leaves orphaned-but-intact data resources in AWS. `scripts/recover-prod.ps1` discovers orphaned resources via AWS CLI, builds CloudFormation import changesets to re-adopt them, then runs `cdk deploy` to recreate stateless resources. Documented in `RUNBOOK.md`; validated with a 37-minute uncut demo.
 
-**CI/CD:** GitHub Actions on push/PR to `main`/`dev`. Live coverage badges (lines, statements, functions, branches) update on every push. PR comments show per-file coverage diff via `ArtiomTr/jest-coverage-report-action`.
+**CI/CD:** GitHub Actions on push/PR to `main`/`dev`. The README displays live coverage badges, and PRs receive automated per-file coverage diffs via `ArtiomTr/jest-coverage-report-action` to highlight regressions and gains.
 
 ---
 
@@ -112,22 +112,11 @@ A `analyzeInput()` decision function routes each request to one of two paths:
 
 ### 4.1 Test Coverage
 
-| Repository | Statements | Branches | Functions | Lines |
-|-----------|-----------|---------|----------|-------|
-| Peachy (frontend) | 98.47% | 93.6% | 95.94% | 99.44% |
-| Peachy-Infra (backend) | 92.7% | 84.52% | 91.72% | 93.47% |
+**What is tested:**
+Front-end tests cover core UI flows, context state transitions, component rendering, and date/calendar utilities. Backend tests include Lambda unit tests across domains, CDK assertion tests for all stacks, and handler-level integration tests for complex AI parse behavior. CDK assertion tests synthesize stacks and verify CloudFormation output via `aws-cdk-lib/assertions` without deploying. Lambda unit tests use `aws-sdk-client-mock` to isolate CPU logic from I/O. Integration tests that hit real API Gateway endpoints are run manually and excluded from CI, as are live Bedrock end-to-end tests (`__tests__/integration/ai/`).
 
-**Backend test breakdown:**
-
-| Category | Count | In CI |
-|----------|-------|-------|
-| Lambda unit tests (all domains) | 481 | Yes |
-| CDK assertion tests (all 7 stacks) | 109 | Yes |
-| Integration tests (live API) | 59 | No — requires deployed env |
-
-CDK assertion tests synthesize stacks and verify CloudFormation output via `aws-cdk-lib/assertions` without deploying. Lambda unit tests use `aws-sdk-client-mock` to isolate CPU logic from I/O. Integration tests hit real API Gateway endpoints and are excluded from CI. Live Bedrock end-to-end tests (`__tests__/integration/ai/`) are run manually against the deployed dev environment.
-
-Areas intentionally not covered: native Expo push APIs, the HTTP API client, pixel-positioned calendar grid views, AWS Transcribe/Bedrock live calls, and DynamoDB timeout-based retry logic — all require live infrastructure or native device APIs unavailable in Jest.
+**What is not tested (by design):**
+Native Expo push APIs, the HTTP API client, pixel-positioned calendar grid views, AWS Transcribe/Bedrock live calls, and DynamoDB timeout-based retry logic. These require live infrastructure or native device APIs unavailable in Jest.
 
 ### 4.2 Profiling and Optimization
 
