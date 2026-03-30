@@ -38,6 +38,28 @@ const MAPPING = {
   'sparkles': 'auto-awesome',
   'line.horizontal.3': 'menu',
   'stop.fill': 'stop',
+  // Google Calendar sync icons
+  'calendar.badge.plus': 'event-available',
+  'arrow.2.circlepath': 'sync',
+  'paintpalette.fill': 'palette',
+  'checkmark.shield.fill': 'verified-user',
+  'checkmark': 'check',
+  // Settings icons
+  'paintbrush.fill': 'brush',
+  'person.crop.circle': 'account-circle',
+  'bell.fill': 'notifications',
+  'link': 'link',
+  'clock.fill': 'schedule',
+  '1.circle': 'looks-one',
+  'person.2.fill': 'people',
+  'eye.fill': 'visibility',
+  'chart.bar.fill': 'bar-chart',
+  'lock.fill': 'lock',
+  'hand.raised.fill': 'front-hand',
+  'key.fill': 'vpn-key',
+  'questionmark.circle.fill': 'help',
+  'star.fill': 'star',
+  'info.circle.fill': 'info',
 } as IconMapping;
 
 /**

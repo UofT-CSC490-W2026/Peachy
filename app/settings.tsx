@@ -5,6 +5,7 @@ import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useAuth } from '@/contexts/auth-context';
+import { useGoogleCalendar } from '@/contexts/google-calendar-context';
 
 // ─── Row types ────────────────────────────────────────────────────────────────
 
@@ -63,7 +64,9 @@ export default function SettingsScreen() {
   const router = useRouter();
   const borderColor = useThemeColor({}, 'border');
   const textColor = useThemeColor({}, 'text');
+  const textSecondary = useThemeColor({}, 'textSecondary');
   const { logout } = useAuth();
+  const { isLinked: gcalLinked } = useGoogleCalendar();
 
   const soon = (feature: string) => () => Alert.alert(feature, 'Coming soon');
 
@@ -117,9 +120,15 @@ export default function SettingsScreen() {
           />
           <Row
             icon="calendar.badge.plus"
-            title="Calendar Sync"
-            subtitle="Connect Google, Apple, or Outlook"
-            onPress={soon('Calendar Sync')}
+            title="Google Calendar"
+            subtitle={gcalLinked ? 'Syncing with your Google Calendar' : 'Import and sync your Google Calendar'}
+            onPress={gcalLinked ? undefined : () => router.push('/google-calendar-link')}
+            showChevron={!gcalLinked}
+            right={gcalLinked ? (
+              <View style={[styles.linkedPill, { backgroundColor: textSecondary + '22', borderColor: textSecondary + '44' }]}>
+                <ThemedText style={[styles.linkedPillText, { color: textSecondary }]}>Linked</ThemedText>
+              </View>
+            ) : undefined}
           />
           <Row
             icon="link"
@@ -289,5 +298,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#E74C3C',
+  },
+  linkedPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  linkedPillText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

@@ -11,6 +11,7 @@ import { AuthProvider, useAuth } from '@/contexts/auth-context';
 import { ThemeProvider as AppThemeProvider } from '@/contexts/theme-context';
 import { FriendsProvider } from '@/contexts/friends-context';
 import { ChatProvider } from '@/contexts/chat-context';
+import { GoogleCalendarProvider, useGoogleCalendar } from '@/contexts/google-calendar-context';
 import { registerForPushNotifications, configureNotificationHandler } from '@/utils/notifications';
 import { createApiClient } from '@/utils/api-client';
 
@@ -24,9 +25,11 @@ export const unstable_settings = {
 function RootNavigator() {
   const colorScheme = useColorScheme();
   const { isAuthenticated, isRestoring, getIdToken } = useAuth();
+  const { isLinked: gcalLinked } = useGoogleCalendar();
   const segments = useSegments();
   const router = useRouter();
   const pushRegisteredRef = useRef(false);
+  const gcalPromptShownRef = useRef(false);
 
   // All hooks must run unconditionally before any conditional return.
   useEffect(() => {
@@ -41,6 +44,20 @@ function RootNavigator() {
       router.replace('/(tabs)');
     }
   }, [isAuthenticated, isRestoring, segments, router]);
+
+  // Show Google Calendar prompt once after first login if not already linked
+  useEffect(() => {
+    if (!isAuthenticated || isRestoring || gcalLinked || gcalPromptShownRef.current) return;
+    const inTabs = segments[0] === '(tabs)';
+    if (!inTabs) return;
+
+    gcalPromptShownRef.current = true;
+    // Small delay so the tabs screen renders first
+    const timer = setTimeout(() => {
+      router.push('/google-calendar-prompt');
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [isAuthenticated, isRestoring, gcalLinked, segments, router]);
 
   // Register for push notifications once after login
   useEffect(() => {
@@ -112,6 +129,8 @@ function RootNavigator() {
           <Stack.Screen name="appearance" options={{ presentation: 'modal', headerShown: false }} />
               <Stack.Screen name="friends" options={{ presentation: 'modal', headerShown: false }} />
               <Stack.Screen name="interests" options={{ presentation: 'modal', headerShown: false }} />
+              <Stack.Screen name="google-calendar-prompt" options={{ presentation: 'modal', headerShown: false }} />
+              <Stack.Screen name="google-calendar-link" options={{ presentation: 'modal', headerShown: false }} />
             </Stack>
             <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
           </ThemeProvider>
@@ -125,7 +144,9 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <AppThemeProvider>
-        <RootNavigator />
+        <GoogleCalendarProvider>
+          <RootNavigator />
+        </GoogleCalendarProvider>
       </AppThemeProvider>
     </AuthProvider>
   );
