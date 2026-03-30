@@ -269,7 +269,6 @@ interface AuthContextType {
   startGoogleSignIn: () => Promise<void>;
   exchangeOAuthCode: (code: string) => Promise<AuthResult>;
   logout: () => void;
-  exchangeOAuthCode: (code: string) => Promise<AuthResult>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -575,14 +574,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(updated);
   }, []);
 
-  const exchangeOAuthCode = useCallback(async (_code: string): Promise<AuthResult> => {
-    // TODO: Exchange Cognito hosted UI OAuth code for tokens.
-    // Real implementation: POST to https://<domain>/oauth2/token with
-    //   grant_type=authorization_code, code=_code, redirect_uri=<appScheme>://callback
-    // Then parse the id_token, populate _currentCognitoUser / memStore, and call setUser().
-    return { success: false, error: 'Google sign-in not yet implemented' };
-  }, []);
-
   const logout = useCallback(() => {
     // S1: globalSignOut invalidates the Cognito refresh token server-side so that
     // exfiltrated tokens cannot be used after the user logs out. We clear local
@@ -624,7 +615,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         startGoogleSignIn,
         exchangeOAuthCode,
         logout,
-        exchangeOAuthCode,
       }}
     >
       {children}
