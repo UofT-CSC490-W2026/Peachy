@@ -12,7 +12,8 @@ import { User } from '@/types';
 
 export default function FriendProfileScreen() {
   const router = useRouter();
-  const { userId } = useLocalSearchParams<{ userId: string }>();
+  const params = useLocalSearchParams<{ userId: string }>();
+  const userId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
   const tintColor = useThemeColor({}, 'tint');
   const textSecondary = useThemeColor({}, 'textSecondary');
   const borderColor = useThemeColor({}, 'border');
@@ -22,10 +23,13 @@ export default function FriendProfileScreen() {
   const { calendars, fetchUser } = useCalendar();
 
   const [friend, setFriend] = useState<User | undefined>();
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!!userId);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     fetchUser(userId)
       .then(u => setFriend(u))
