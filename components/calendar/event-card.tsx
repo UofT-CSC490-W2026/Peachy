@@ -19,7 +19,7 @@ export function EventCard({ event, calendarColor, onPress }: EventCardProps) {
 
   const startTime = new Date(event.startTime);
   const endTime = new Date(event.endTime);
-  const timeRange = formatDateRange(startTime, endTime, event.isAllDay);
+  const timeRange = formatDateRange(startTime, endTime, event.isAllDay, event.timezone);
 
   const handlePress = () => {
     if (onPress) {

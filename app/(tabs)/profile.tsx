@@ -1,12 +1,11 @@
 import { StyleSheet, View, ScrollView, Pressable, Image, RefreshControl } from 'react-native';
 import { useMemo, useState, useCallback } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useAuth } from '@/contexts/auth-context';
 import { useFriends } from '@/contexts/friends-context';
-import { useInterests } from '@/hooks/use-interests';
 import { INTEREST_CATEGORIES } from '@/constants/interests';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
@@ -19,7 +18,9 @@ export default function ProfileScreen() {
   const tintColor = useThemeColor({}, 'tint');
   const { user, fetchProfile } = useAuth();
   const { friends } = useFriends();
-  const { selected } = useInterests(user?.interests);
+
+  // Derive selected interests directly from context — always in sync after save
+  const selected = useMemo(() => new Set(user?.interests ?? []), [user?.interests]);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const handleRefresh = useCallback(async () => {
@@ -27,6 +28,11 @@ export default function ProfileScreen() {
     await fetchProfile().catch(() => {});
     setIsRefreshing(false);
   }, [fetchProfile]);
+
+  // Refresh profile data whenever this screen comes into focus
+  useFocusEffect(useCallback(() => {
+    fetchProfile().catch(() => {});
+  }, [fetchProfile]));
 
   const { categoriesWithTags, hasInterests } = useMemo(() => {
     let remaining = 20;
@@ -93,6 +99,11 @@ export default function ProfileScreen() {
 
         {/* Name */}
         <ThemedText style={styles.name}>{user?.name}</ThemedText>
+
+        {/* Bio */}
+        {user?.bio ? (
+          <ThemedText style={[styles.bio, { color: textSecondary }]}>{user.bio}</ThemedText>
+        ) : null}
 
         {/* Edit Profile button */}
         <Pressable
@@ -187,7 +198,8 @@ const styles = StyleSheet.create({
   statItem: { alignItems: 'center', gap: 2 },
   statNumber: { fontSize: 16, fontWeight: '700' },
   statLabel: { fontSize: 11 },
-  name: { fontSize: 14, fontWeight: '600', marginBottom: 14 },
+  name: { fontSize: 14, fontWeight: '600', marginBottom: 6 },
+  bio: { fontSize: 13, lineHeight: 18, marginBottom: 14 },
   editButton: {
     borderWidth: 1,
     borderRadius: 10,

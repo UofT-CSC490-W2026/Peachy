@@ -11,4 +11,5 @@ export interface Calendar {
   isVisible: boolean;
   createdAt: string;
   updatedAt: string;
+  googleCalendarId?: string;
 }

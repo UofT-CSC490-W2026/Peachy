@@ -60,7 +60,7 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
       const event = events.find(e => e.id === item.eventId);
       if (event) {
         const eventDate = new Date(event.startTime);
-        const timeStr = event.isAllDay ? 'All day' : formatTime(eventDate);
+        const timeStr = event.isAllDay ? 'All day' : formatTime(eventDate, event.timezone);
         const dateStr = eventDate.toLocaleDateString('en-US', {
           weekday: 'short',
           month: 'short',
@@ -91,7 +91,7 @@ export function PendingItems({ items, onAccept, onDecline }: PendingItemsProps) 
         const sender = getUser(item.fromUserId);
         const senderName = sender ? sender.name : 'The organizer';
         const eventDate = new Date(event.startTime);
-        const timeStr = event.isAllDay ? 'All day' : formatTime(eventDate);
+        const timeStr = event.isAllDay ? 'All day' : formatTime(eventDate, event.timezone);
         const dateStr = eventDate.toLocaleDateString('en-US', {
           weekday: 'short', month: 'short', day: 'numeric',
         });

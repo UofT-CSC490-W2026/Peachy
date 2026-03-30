@@ -122,7 +122,7 @@ export default function EventDetailScreen() {
 
   const startTime = new Date(event.startTime);
   const endTime = new Date(event.endTime);
-  const timeRange = formatDateRange(startTime, endTime, event.isAllDay);
+  const timeRange = formatDateRange(startTime, endTime, event.isAllDay, event.timezone);
 
   const handleEdit = () => {
     router.push({

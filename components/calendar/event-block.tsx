@@ -47,7 +47,7 @@ export function EventBlock({ event, color, top, height, onPress, left, width }: 
           lightColor={color}
           darkColor={color}
         >
-          {formatTime(startTime)}
+          {formatTime(startTime, event.timezone)}
         </ThemedText>
       )}
     </Pressable>

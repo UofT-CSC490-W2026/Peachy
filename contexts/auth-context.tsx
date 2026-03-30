@@ -3,10 +3,14 @@ import { Platform } from 'react-native';
 import {
   CognitoUserPool,
   CognitoUser,
+  CognitoUserSession,
+  CognitoIdToken,
+  CognitoAccessToken,
+  CognitoRefreshToken,
   AuthenticationDetails,
   CognitoUserAttribute,
-  type CognitoUserSession,
 } from 'amazon-cognito-identity-js';
+import * as WebBrowser from 'expo-web-browser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
@@ -255,15 +259,16 @@ interface AuthContextType {
   setPendingVerificationEmail: (email: string | null) => void;
   getIdToken: () => Promise<string | null>;
   fetchProfile: () => Promise<void>;
-  updateUser: (updates: Partial<Pick<User, 'name' | 'username' | 'interests'>>) => Promise<void>;
+  updateUser: (updates: Partial<Pick<User, 'name' | 'username' | 'bio' | 'interests'>>) => Promise<void>;
   login: (email: string, password: string) => Promise<AuthResult>;
   signup: (name: string, email: string, password: string) => Promise<AuthResult>;
   confirmSignup: (email: string, code: string) => Promise<AuthResult>;
   resendCode: (email: string) => Promise<AuthResult>;
   forgotPassword: (email: string) => Promise<AuthResult>;
   resetPassword: (email: string, code: string, newPassword: string) => Promise<AuthResult>;
-  logout: () => void;
+  startGoogleSignIn: () => Promise<void>;
   exchangeOAuthCode: (code: string) => Promise<AuthResult>;
+  logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -430,6 +435,103 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // ─── Google OAuth ──────────────────────────────────────────────────────────
+  const exchangeOAuthCode = useCallback(async (code: string): Promise<AuthResult> => {
+    setIsLoading(true);
+    try {
+      const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, string>;
+      const domain = extra.cognitoDomain;
+      const clientId = extra.cognitoClientId;
+      const scheme = (Constants.expoConfig?.scheme as string) ?? 'peachy-dev';
+      const redirectUri = `${scheme}://callback`;
+
+      // Exchange authorization code for tokens via Cognito token endpoint
+      const tokenUrl = `https://${domain}/oauth2/token`;
+      const body = new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: clientId,
+        code,
+        redirect_uri: redirectUri,
+      });
+
+      const response = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        devLog('OAuth token exchange failed:', err.error);
+        return { success: false, error: err.error_description || 'Failed to sign in with Google' };
+      }
+
+      const tokens = await response.json();
+
+      // Build a CognitoUserSession from the OAuth tokens
+      const idToken = new CognitoIdToken({ IdToken: tokens.id_token });
+      const accessToken = new CognitoAccessToken({ AccessToken: tokens.access_token });
+      const refreshToken = new CognitoRefreshToken({ RefreshToken: tokens.refresh_token });
+      const session = new CognitoUserSession({ IdToken: idToken, AccessToken: accessToken, RefreshToken: refreshToken });
+
+      // Extract the username from the id token (Cognito sub or preferred_username)
+      const claims = idToken.payload as Record<string, string>;
+      const username = claims['cognito:username'] ?? claims.sub;
+
+      // Create CognitoUser and set the session so the SDK persists tokens in storage
+      const cognitoUser = new CognitoUser({ Username: username, Pool: getPool() });
+      cognitoUser.setSignInUserSession(session);
+      _currentCognitoUser = cognitoUser;
+
+      setUser(userFromSession(session));
+
+      // Non-blocking: enrich with backend profile data
+      apiClient.get<User>('/users/me').then(setUser).catch((e) =>
+        devLog('Post-OAuth fetchProfile failed:', e instanceof Error ? e.message : e)
+      );
+
+      return { success: true };
+    } catch (err) {
+      devLog('OAuth exchange error:', err instanceof Error ? err.message : err);
+      return { success: false, error: 'Google sign-in failed. Please try again.' };
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const startGoogleSignIn = useCallback(async () => {
+    const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, string>;
+    const domain = extra.cognitoDomain;
+    const clientId = extra.cognitoClientId;
+    const scheme = (Constants.expoConfig?.scheme as string) ?? 'peachy-dev';
+    const redirectUri = `${scheme}://callback`;
+
+    const authUrl =
+      `https://${domain}/oauth2/authorize?` +
+      `client_id=${clientId}` +
+      `&response_type=code` +
+      `&scope=openid+email+profile` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&identity_provider=Google`;
+
+    const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+
+    if (result.type === 'success' && result.url) {
+      // Extract the authorization code from the redirect URL
+      const url = new URL(result.url);
+      const code = url.searchParams.get('code');
+      const error = url.searchParams.get('error');
+
+      if (error) {
+        devLog('Google OAuth error:', error);
+        return;
+      }
+      if (code) {
+        await exchangeOAuthCode(code);
+      }
+    }
+  }, [exchangeOAuthCode]);
+
   const getIdToken = useCallback((): Promise<string | null> => {
     // Return the in-flight request if one is already pending so concurrent
     // callers share the same Cognito session refresh (refresh tokens are single-use).
@@ -467,17 +569,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const updateUser = useCallback(async (updates: Partial<Pick<User, 'name' | 'username' | 'interests'>>) => {
+  const updateUser = useCallback(async (updates: Partial<Pick<User, 'name' | 'username' | 'bio' | 'interests'>>) => {
     const updated = await apiClient.put<User>('/users/me', updates);
     setUser(updated);
-  }, []);
-
-  const exchangeOAuthCode = useCallback(async (_code: string): Promise<AuthResult> => {
-    // TODO: Exchange Cognito hosted UI OAuth code for tokens.
-    // Real implementation: POST to https://<domain>/oauth2/token with
-    //   grant_type=authorization_code, code=_code, redirect_uri=<appScheme>://callback
-    // Then parse the id_token, populate _currentCognitoUser / memStore, and call setUser().
-    return { success: false, error: 'Google sign-in not yet implemented' };
   }, []);
 
   const logout = useCallback(() => {
@@ -518,8 +612,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         resendCode,
         forgotPassword,
         resetPassword,
-        logout,
+        startGoogleSignIn,
         exchangeOAuthCode,
+        logout,
       }}
     >
       {children}
