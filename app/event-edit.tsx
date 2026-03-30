@@ -1,5 +1,5 @@
 import { StyleSheet, ScrollView, View, Pressable, Alert, Modal, ActivityIndicator } from 'react-native';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
@@ -20,17 +20,24 @@ export default function EventEditScreen() {
   const params = useLocalSearchParams();
   const eventId = params.id as string;
 
-  const { calendars, events, updateEvent, getUser } = useCalendar();
+  const { calendars, events, updateEvent } = useCalendar();
   const { logout, user } = useAuth();
   const event = events.find(e => e.id === eventId);
-  const isOwner = event && user && event.createdBy === user.id;
+  const eventCalendar = event ? calendars.find(c => c.id === event.calendarId) : null;
+  const ownedCalendars = useMemo(
+    () => calendars.filter(c => c.ownerId === user?.id),
+    [calendars, user?.id]
+  );
+  const isOwner = event && user && eventCalendar && eventCalendar.ownerId === user.id && !event.linkedEventId;
 
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
 
   const [title, setTitle] = useState(event?.title || '');
-  const [selectedCalendar, setSelectedCalendar] = useState(event ? calendars.find(c => c.id === event.calendarId) || calendars[0] : calendars[0]);
+  const [selectedCalendar, setSelectedCalendar] = useState(
+    event ? ownedCalendars.find(c => c.id === event.calendarId) || ownedCalendars[0] : ownedCalendars[0]
+  );
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [isAllDay, setIsAllDay] = useState(event?.isAllDay || false);
   const [startDate, setStartDate] = useState(() => {
@@ -51,6 +58,16 @@ export default function EventEditScreen() {
   const [description, setDescription] = useState(event?.description || '');
   const [invitedUserIds, setInvitedUserIds] = useState<string[]>(event?.invitedUserIds || []);
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!selectedCalendar && ownedCalendars.length > 0) {
+      setSelectedCalendar(ownedCalendars[0]);
+      return;
+    }
+    if (selectedCalendar && !ownedCalendars.find(c => c.id === selectedCalendar.id)) {
+      setSelectedCalendar(ownedCalendars[0]);
+    }
+  }, [ownedCalendars, selectedCalendar]);
 
   // Handle return from user search
   useEffect(() => {
@@ -84,7 +101,7 @@ export default function EventEditScreen() {
         </View>
         <View style={styles.errorContainer}>
           <ThemedText style={styles.errorText}>
-            Only the event owner can edit this event.
+            Only the calendar owner can edit events in this calendar.
           </ThemedText>
           <Pressable
             style={[styles.backHomeButton, { backgroundColor: tintColor }]}
@@ -100,6 +117,10 @@ export default function EventEditScreen() {
   const handleSave = async () => {
     if (!title.trim()) {
       Alert.alert('Error', 'Please enter an event title');
+      return;
+    }
+    if (!selectedCalendar) {
+      Alert.alert('Error', 'Please select a calendar');
       return;
     }
     if (!isAllDay && endDate <= startDate) {
@@ -162,9 +183,9 @@ export default function EventEditScreen() {
 
         <FormField label="Calendar">
           <FormPickerRow
-            label={selectedCalendar.name}
-            value={selectedCalendar.type}
-            onPress={() => setShowCalendarPicker(true)}
+            label={selectedCalendar?.name ?? 'Select Calendar'}
+            value={selectedCalendar?.type ?? ''}
+            onPress={() => ownedCalendars.length > 0 && setShowCalendarPicker(true)}
           />
         </FormField>
 
@@ -221,26 +242,6 @@ export default function EventEditScreen() {
             <IconSymbol name="chevron.right" size={16} color={tintColor} />
           </Pressable>
 
-          {/* Show invited users */}
-          {invitedUserIds.length > 0 && (
-            <View style={styles.inviteesList}>
-              {invitedUserIds.map(userId => {
-                const user = getUser(userId);
-                if (!user) return null;
-                return (
-                  <View key={userId} style={[styles.inviteeChip, { backgroundColor: surfaceColor, borderColor }]}>
-                    <ThemedText style={styles.inviteeChipText}>{user.name}</ThemedText>
-                    <Pressable
-                      onPress={() => setInvitedUserIds(invitedUserIds.filter(id => id !== userId))}
-                      hitSlop={8}
-                    >
-                      <IconSymbol name="xmark" size={14} color={tintColor} />
-                    </Pressable>
-                  </View>
-                );
-              })}
-            </View>
-          )}
         </FormField>
 
         {/* Availability Checker */}
@@ -298,7 +299,7 @@ export default function EventEditScreen() {
               </Pressable>
             </View>
             <ScrollView style={styles.calendarList}>
-              {calendars.map((calendar) => (
+              {ownedCalendars.map((calendar) => (
                 <Pressable
                   key={calendar.id}
                   style={[
@@ -324,7 +325,7 @@ export default function EventEditScreen() {
                       </ThemedText>
                     </View>
                   </View>
-                  {selectedCalendar.id === calendar.id && (
+                  {selectedCalendar?.id === calendar.id && (
                     <IconSymbol name="checkmark.circle.fill" size={24} color={tintColor} />
                   )}
                 </Pressable>
@@ -403,24 +404,6 @@ const styles = StyleSheet.create({
   addPeopleText: {
     flex: 1,
     fontSize: 16,
-  },
-  inviteesList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 12,
-  },
-  inviteeChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 8,
-  },
-  inviteeChipText: {
-    fontSize: 14,
   },
   errorContainer: {
     flex: 1,

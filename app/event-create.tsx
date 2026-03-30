@@ -1,5 +1,5 @@
 import { StyleSheet, ScrollView, View, Pressable, Alert, Modal, ActivityIndicator } from 'react-native';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Constants from 'expo-constants';
 import { ThemedView } from '@/components/themed-view';
@@ -14,26 +14,33 @@ import { AvailabilityViewer } from '@/components/availability-viewer';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useCalendar } from '@/contexts/calendar-context';
 import { useAuth } from '@/contexts/auth-context';
-import { AuthError } from '@/utils/api-client';
+import { AuthError, createApiClient } from '@/utils/api-client';
 import { getSlotIndex } from '@/utils/rl-helpers';
-import { contacts } from '@/data/mock-data';
-
+import type { Calendar } from '@/types';
 export default function EventCreateScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { calendars, createEvent } = useCalendar();
+  const { calendars, createEvent, getUser, fetchUser } = useCalendar();
   const { user, getIdToken, logout } = useAuth();
+    const apiClient = useMemo(() => createApiClient(getIdToken), [getIdToken]);
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
+  const dangerColor = useThemeColor({}, 'danger');
 
   // Check if AI-generated
   const isAIGenerated = params.aiGenerated === 'true';
   const aiInput = params.aiInput as string | undefined;
 
+  const ownedCalendars = useMemo(
+    () => calendars.filter(c => c.ownerId === user?.id),
+    [calendars, user?.id]
+  );
+  const hasOwnedCalendars = ownedCalendars.length > 0;
+
   // Pre-fill from AI params or start empty
   const [title, setTitle] = useState(params.title as string || '');
-  const [selectedCalendar, setSelectedCalendar] = useState(calendars[0] ?? null);
+  const [selectedCalendar, setSelectedCalendar] = useState(ownedCalendars[0] ?? null);
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [isAllDay, setIsAllDay] = useState(params.isAllDay === 'true');
   const [startDate, setStartDate] = useState(() => {
@@ -55,6 +62,8 @@ export default function EventCreateScreen() {
   const [location, setLocation] = useState(params.location as string || '');
   const [description, setDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [inviteeDisplayNames, setInviteeDisplayNames] = useState<Record<string, string>>({});
+  const [calendarMemberIds, setCalendarMemberIds] = useState<string[] | null>(null);
   const [invitedUserIds, setInvitedUserIds] = useState<string[]>(() => {
     if (params.inviteeIds) {
       const ids = (params.inviteeIds as string).split(',').filter(id => id.trim());
@@ -75,10 +84,25 @@ export default function EventCreateScreen() {
 
   // Set default calendar once calendars load (handles async context initialization)
   useEffect(() => {
-    if (!selectedCalendar && calendars.length > 0) {
-      setSelectedCalendar(calendars[0]);
+    if (!selectedCalendar && ownedCalendars.length > 0) {
+      setSelectedCalendar(ownedCalendars[0]);
+      return;
     }
-  }, [calendars, selectedCalendar]);
+    if (selectedCalendar && !ownedCalendars.find(c => c.id === selectedCalendar.id)) {
+      setSelectedCalendar(ownedCalendars[0] ?? null);
+    }
+  }, [ownedCalendars, selectedCalendar]);
+
+  // Fetch display names for invitees not already in the user cache
+  useEffect(() => {
+    invitedUserIds.forEach(uid => {
+      if (!getUser(uid)) {
+        fetchUser(uid).then(u => {
+          if (u) setInviteeDisplayNames(prev => ({ ...prev, [uid]: u.name }));
+        });
+      }
+    });
+  }, [invitedUserIds, fetchUser, getUser]);
 
   // Handle return from user search
   useEffect(() => {
@@ -94,7 +118,36 @@ export default function EventCreateScreen() {
     }
   }, [params.selectedUsers]);
 
+  useEffect(() => {
+    if (!selectedCalendar || selectedCalendar.type !== 'shared') {
+      setCalendarMemberIds(null);
+      return;
+    }
+    let isActive = true;
+    apiClient.get<Calendar>(`calendars/${selectedCalendar.id}`)
+      .then(cal => {
+        if (isActive) setCalendarMemberIds(cal.memberIds ?? []);
+      })
+      .catch(() => {
+        if (isActive) setCalendarMemberIds(null);
+      });
+    return () => { isActive = false; };
+  }, [apiClient, selectedCalendar?.id, selectedCalendar?.type]);
+
+  const memberInviteeNames = useMemo(() => {
+    if (!selectedCalendar) return [] as string[];
+    const memberIdsSource = calendarMemberIds ?? selectedCalendar.memberIds ?? [];
+    const memberIds = new Set(memberIdsSource);
+    return invitedUserIds
+      .filter(id => memberIds.has(id))
+      .map(id => getUser(id)?.name ?? inviteeDisplayNames[id] ?? id);
+  }, [invitedUserIds, selectedCalendar, calendarMemberIds, inviteeDisplayNames, getUser]);
+
   const handleSave = async () => {
+    if (!hasOwnedCalendars) {
+      Alert.alert('No Owned Calendars', 'Create or own a calendar before creating events.');
+      return;
+    }
     if (!title.trim()) {
       Alert.alert('Error', 'Please enter an event title');
       return;
@@ -116,8 +169,8 @@ export default function EventCreateScreen() {
     const aiEditedFields: string[] = [];
     if (isAIGenerated) {
       if (title.trim() !== aiOriginalValues.title) aiEditedFields.push('title');
-      if (startDate.toISOString() !== aiOriginalValues.startTime) aiEditedFields.push('startTime');
-      if (endDate.toISOString() !== aiOriginalValues.endTime) aiEditedFields.push('endTime');
+      if (startDate.getTime() !== new Date(aiOriginalValues.startTime).getTime()) aiEditedFields.push('startTime');
+      if (endDate.getTime() !== new Date(aiOriginalValues.endTime).getTime()) aiEditedFields.push('endTime');
       if (location.trim() !== aiOriginalValues.location) aiEditedFields.push('location');
       if (isAllDay !== aiOriginalValues.isAllDay) aiEditedFields.push('isAllDay');
       if (invitedUserIds.join(',') !== aiOriginalValues.inviteeIds) aiEditedFields.push('invitedUserIds');
@@ -201,6 +254,16 @@ export default function EventCreateScreen() {
           </View>
         )}
 
+        {!hasOwnedCalendars && (
+          <View style={[styles.emptyStateCard, { backgroundColor: surfaceColor, borderColor }]}
+          >
+            <ThemedText type="defaultSemiBold">No owned calendars</ThemedText>
+            <ThemedText style={{ color: tintColor }}>
+              Create or own a calendar to add events.
+            </ThemedText>
+          </View>
+        )}
+
         <FormField label="Title" required>
           <FormTextInput
             value={title}
@@ -214,7 +277,7 @@ export default function EventCreateScreen() {
           <FormPickerRow
             label={selectedCalendar?.name ?? 'Select Calendar'}
             value={selectedCalendar?.type ?? ''}
-            onPress={() => setShowCalendarPicker(true)}
+            onPress={() => hasOwnedCalendars && setShowCalendarPicker(true)}
           />
         </FormField>
 
@@ -275,11 +338,10 @@ export default function EventCreateScreen() {
           {invitedUserIds.length > 0 && (
             <View style={styles.inviteesList}>
               {invitedUserIds.map(userId => {
-                const user = contacts.find(c => c.id === userId);
-                if (!user) return null;
+                const displayName = getUser(userId)?.name ?? inviteeDisplayNames[userId] ?? userId;
                 return (
                   <View key={userId} style={[styles.inviteeChip, { backgroundColor: surfaceColor, borderColor }]}>
-                    <ThemedText style={styles.inviteeChipText}>{user.name}</ThemedText>
+                    <ThemedText style={styles.inviteeChipText}>{displayName}</ThemedText>
                     <Pressable
                       onPress={() => setInvitedUserIds(invitedUserIds.filter(id => id !== userId))}
                       hitSlop={8}
@@ -289,6 +351,14 @@ export default function EventCreateScreen() {
                   </View>
                 );
               })}
+            </View>
+          )}
+
+          {memberInviteeNames.length > 0 && (
+            <View style={[styles.warningCard, { borderColor: dangerColor, backgroundColor: dangerColor + '10' }]}>
+              <ThemedText style={[styles.warningText, { color: dangerColor }]}>
+                Already members (no invite needed): {memberInviteeNames.join(', ')}
+              </ThemedText>
             </View>
           )}
         </FormField>
@@ -313,8 +383,12 @@ export default function EventCreateScreen() {
           </Pressable>
           <Pressable
             onPress={handleSave}
-            disabled={isSaving}
-            style={[styles.button, styles.saveButton, { backgroundColor: tintColor, opacity: isSaving ? 0.7 : 1 }]}
+            disabled={isSaving || !hasOwnedCalendars}
+            style={[
+              styles.button,
+              styles.saveButton,
+              { backgroundColor: tintColor, opacity: isSaving || !hasOwnedCalendars ? 0.5 : 1 },
+            ]}
           >
             {isSaving ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
@@ -347,7 +421,7 @@ export default function EventCreateScreen() {
               </Pressable>
             </View>
             <ScrollView style={styles.calendarList}>
-              {calendars.map((calendar) => (
+              {ownedCalendars.map((calendar) => (
                 <Pressable
                   key={calendar.id}
                   style={[
@@ -432,6 +506,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 12,
   },
+  emptyStateCard: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 6,
+  },
   addPeopleText: {
     flex: 1,
     fontSize: 16,
@@ -441,6 +521,16 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginTop: 12,
+  },
+  warningCard: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  warningText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   inviteeChip: {
     flexDirection: 'row',

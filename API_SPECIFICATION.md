@@ -362,17 +362,17 @@ Add member to calendar (invite).
 
 **Request:**
 ```typescript
-{
-  userId: string;
-}
+// userId is passed as a path parameter:
+// POST /calendars/:calendarId/members/:userId
 ```
 
 **Response:** `200 OK`
 ```typescript
 {
-  calendar: Calendar;
-  members: User[];
-  pendingItem: PendingItem;  // Created invitation
+  calendarId: string;
+  userId: string;
+  role: "member";
+  addedAt: string;
 }
 ```
 
@@ -382,9 +382,9 @@ Add member to calendar (invite).
 - `409` - User already a member
 
 **Notes:**
-- Creates pending item (calendar_invite) for invited user
-- User must accept invitation to join
-- Once accepted, automatically added to calendar group chat
+- Member is added immediately (no pending calendar_invite acceptance flow)
+- Adds new member to calendar group chat when a group chat exists
+- Sends push notification to the added member
 
 ---
 
@@ -508,11 +508,10 @@ CalendarEvent
 
 **Errors:**
 - `400` - Validation error (endTime before startTime, etc.)
-- `403` - User is not a member of this calendar
+- `403` - Only the calendar owner can create events in this calendar
 
 **Notes:**
 - Creates pending items (event_invite) for invitedUserIds
-- Sends event invite messages to calendar group chat
 - Sets createdBy to current user
 - Triggers `onCalendarUpdate` subscription
 - AI fields are stored for RL training (improving AI accuracy over time)
@@ -549,11 +548,10 @@ CalendarEvent
 ```
 
 **Errors:**
-- `403` - Only creator (createdBy) can update
+- `403` - Only the calendar owner can update
 
 **Notes:**
 - Creates pending items (event_update) for existing invitees if time/date changes
-- Updates invite messages in chat
 - Triggers `onCalendarUpdate` subscription
 - **Updates user RlPreferences (Thompson Sampling):**
   - If event was aiGenerated=true and time was changed: increment β for old slot, α for new slot
@@ -572,12 +570,11 @@ Delete event.
 ```
 
 **Errors:**
-- `403` - Only creator can delete
+- `403` - Only the calendar owner can delete
 
 **Notes:**
 - Deletes all related pending items
 - Sends notification to invitees
-- Removes event invite messages from chat (or marks as cancelled)
 - Triggers `onCalendarUpdate` subscription
 
 ---
@@ -920,13 +917,12 @@ Accept pending invitation.
 **Side Effects by Type:**
 
 **calendar_invite:**
-- Adds user to calendar members
-- Adds user to calendar group chat
-- Triggers `onCalendarUpdate` subscription
+- Not currently implemented in pending accept flow.
+- Calendar membership is currently managed directly via `POST /calendars/:calendarId/members` (owner adds member immediately).
 
 **event_invite:**
-- Updates inviteStatus in chat messages (eventId match)
-- Triggers `onEventInviteUpdate` subscription
+- Creates a linked copy of the event in the invitee's chosen calendar
+- Updates `InviteeStatuses` on the original event
 
 **event_update:**
 - Updates user's acknowledgment of event changes
@@ -947,11 +943,10 @@ Decline pending invitation.
 **Side Effects by Type:**
 
 **calendar_invite:**
-- No action (user not added to calendar)
+- Not currently implemented in pending decline flow.
 
 **event_invite:**
-- Updates inviteStatus in chat messages (eventId match)
-- Triggers `onEventInviteUpdate` subscription
+- Updates `InviteeStatuses` on the original event
 
 **event_update:**
 - Acknowledges user has seen the update

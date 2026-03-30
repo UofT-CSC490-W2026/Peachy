@@ -74,7 +74,7 @@ describe('AiInputBar', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('calls fetch and creates event on successful send', async () => {
+  it('calls fetch and creates event in the only calendar (no picker shown)', async () => {
     const parsed = {
       parseId: 'p1',
       extractedData: {
@@ -97,7 +97,36 @@ describe('AiInputBar', () => {
     fireEvent(screen.getByPlaceholderText('Schedule with AI...'), 'submitEditing');
 
     await waitFor(() => {
+      // Single calendar → uses it directly, no Alert picker shown
       expect(mockCreateEvent).toHaveBeenCalledWith('cal-1', expect.objectContaining({ title: 'Lunch' }));
+    });
+  });
+
+  it('sends RL feedback even when createEvent fails', async () => {
+    mockCreateEvent.mockRejectedValueOnce(new Error('Network error'));
+    const calls: string[] = [];
+    (global.fetch as jest.Mock).mockImplementation((url: string) => {
+      calls.push(url);
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({
+        parseId: 'p-rl',
+        extractedData: {
+          title: 'Meeting',
+          startTime: '2026-03-28T15:00:00Z',
+          endTime: '2026-03-28T16:00:00Z',
+          isAllDay: false,
+          invitedUserIds: [],
+        },
+        confidence: 0.9,
+        ambiguities: [],
+      })});
+    });
+
+    renderWithProviders(<AiInputBar initialValue="meeting tomorrow" />);
+    fireEvent(screen.getByPlaceholderText('Schedule with AI...'), 'submitEditing');
+
+    await waitFor(() => {
+      // RL feedback URL should have been called even though createEvent failed
+      expect(calls.some(url => url.includes('/rl/feedback'))).toBe(true);
     });
   });
 

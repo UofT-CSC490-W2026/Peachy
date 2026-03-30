@@ -84,7 +84,7 @@ function RootNavigator() {
       subscription = Notifications.addNotificationResponseReceivedListener(response => {
         const data = response.notification.request.content.data as Record<string, string> | undefined;
 
-        if (data?.type === 'event_invite' && data.eventId) {
+        if ((data?.type === 'event_invite' || data?.type === 'event_update') && data.eventId) {
           // Deep-link directly to the event detail
           router.push({ pathname: '/event-detail', params: { id: data.eventId } });
         } else {

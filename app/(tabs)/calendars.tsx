@@ -1,5 +1,5 @@
-import { StyleSheet, View, FlatList, Pressable, ScrollView } from 'react-native';
-import { useState } from 'react';
+import { StyleSheet, View, FlatList, Pressable, ScrollView, RefreshControl } from 'react-native';
+import { useState, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -17,7 +17,13 @@ type TabView = 'calendar' | 'manage';
 type CalendarView = 'day' | 'week' | 'month';
 
 export default function CalendarsScreen() {
-  const { calendars, visibleEvents, toggleCalendarVisibility } = useCalendar();
+  const { calendars, visibleEvents, toggleCalendarVisibility, refreshCalendars, isLoading } = useCalendar();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try { await refreshCalendars(); } finally { setIsRefreshing(false); }
+  }, [refreshCalendars]);
   const router = useRouter();
   const tintColor = useThemeColor({}, 'tint');
   const borderColor = useThemeColor({}, 'border');
@@ -191,6 +197,9 @@ export default function CalendarsScreen() {
                 style={styles.scrollView}
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={true}
+                refreshControl={
+                  <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={tintColor} />
+                }
               >
                 <MonthView
                   currentDate={currentDate}

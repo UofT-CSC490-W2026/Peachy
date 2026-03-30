@@ -131,18 +131,37 @@ npm run test:coverage  # Jest with coverage report (utils/ only)
 ```
 __tests__/
   components/
-    ai-input-bar.test.tsx    # 4 tests — renders, initial value, empty state, typing
-    themed-text.test.tsx     # 6 tests — all text types, testID passthrough
-    themed-view.test.tsx     # 3 tests — children, testID, multiple children
+    ai-input-bar.test.tsx         # AiInputBar — renders, initial value, empty state, typing
+    themed-text.test.tsx          # ThemedText — all text types, testID passthrough
+    themed-view.test.tsx          # ThemedView — children, testID, multiple children
+    calendar-chip.test.tsx        # CalendarChip — toggle state, color
+    calendar-header.test.tsx      # CalendarHeader — month/year display, navigation
+    calendar-settings.test.tsx    # CalendarSettings — member management, permissions
+    event-card.test.tsx           # EventCard — rendering, time display
+    form-field.test.tsx           # FormField — label rendering
+    form-picker-row.test.tsx      # FormPickerRow — press handling
+    form-switch-row.test.tsx      # FormSwitchRow — toggle behavior
+    form-text-input.test.tsx      # FormTextInput — input handling
+    pending-items.test.tsx        # PendingItems — invitations, accept/decline, calendar picker modal
+    view-switcher.test.tsx        # ViewSwitcher — tab switching
+  hooks/
+    use-countdown.test.ts         # useCountdown — timer logic
+    use-interests.test.ts         # useInterests — selection state
+    use-theme-color.test.ts       # useThemeColor — color resolution
   utils/
-    date-helpers.test.ts     # 33 tests — getMonthGrid, getWeekDates, formatTime, isSameDay, etc.
-    validation.test.ts       # 24 tests — all 7 validation functions (email, password, name, etc.)
-    calendar-helpers.test.ts # 13 tests — CALENDAR_COLORS map + getCalendarColor fallback
-    rl-helpers.test.ts       # 12 tests — getSlotIndex formula, 168-slot range, minute-ignoring
+    auth-constants.test.ts        # Auth validation constants
+    date-helpers.test.ts          # getMonthGrid, getWeekDates, formatTime, isSameDay, etc.
+    date-helpers-extended.test.ts # Additional date helper edge case coverage
+    validation.test.ts            # All 7 validation functions (email, password, name, etc.)
+    calendar-helpers.test.ts      # CALENDAR_COLORS map + getCalendarColor fallback
+    rl-helpers.test.ts            # getSlotIndex formula, 168-slot range, minute-ignoring
+    interests-constants.test.ts   # Interests list constants
   test-utils.tsx             # Shared renderWithProviders() wrapper (ThemeProvider)
   tsconfig.json              # Extends root tsconfig + adds "types": ["jest"]
 __mocks__/
   expo-symbols.tsx           # Stub for expo-symbols (SymbolView)
+  expo-av.tsx                # Stub for expo-av (Audio)
+  expo-constants.ts          # Stub for expo-constants
   icon-symbol.tsx            # Stub for IconSymbol component
 ```
 
@@ -199,7 +218,10 @@ __mocks__/
   - **Chat data:** `chats`, `getChatMessages(chatId)`
   - **User data:** `getUser(userId)` — fetches user by ID for enriching pending items with sender names
   - **Calendar actions:** `toggleCalendarVisibility`, `addEvent`, `addCalendar`
-  - **Pending item actions (API-backed):** `acceptPendingItem(itemId)`, `declinePendingItem(itemId)` — calls API then syncs status across local state and chat messages; `refreshPendingItems()` for manual refresh
+  - **Calendar member actions:** `addCalendarMember(calendarId, userId)`, `removeCalendarMember(calendarId, userId)` — API-backed with optimistic local state update
+  - **Pending item actions (API-backed):** `acceptPendingItem(itemId, sk?, calendarId?)` — `calendarId` routes the accepted event copy into a specific calendar; `declinePendingItem(itemId)` — also removes the linked event copy from local state; `refreshPendingItems()` for manual refresh
+  - **User fetching:** `fetchUser(userId)` — fetches a user from the API and caches in `userCacheRef`; use when `getUser()` returns undefined for an ID not yet in the cache
+  - **Calendar refresh:** `refreshCalendars()` — re-fetches all calendars from the API; auto-creates a Personal calendar if user has none
   - **Chat actions:** `updateChatMessage(chatId, messageId, updates)` — also syncs with pending items when invite status changes
 - **Status syncing:** Accepting/declining event invites updates both pending items and chat messages automatically
 - **Pending item enrichment:** UI components use `getUser()`, `events`, and `calendars` to derive display data (title, description) from references
@@ -210,6 +232,7 @@ __mocks__/
 ### Core Types
 - **Calendar** (`types/calendar.ts`): Calendar entity with members, visibility, type (personal/shared)
 - **CalendarEvent** (`types/event.ts`): Event with recurrence, reminders, invitations, designee
+  - **Linked event fields** (optional): `linkedEventId` — ID of the original event (set on copies created when accepting an invite); `originalCreatedBy` — user ID of the original organizer (set on linked copies for display)
   - **AI fields** (optional): `aiGenerated`, `aiInput`, `aiEditedFields` - track AI-created events for RL training
   - When users accept/decline AI-suggested times, Thompson Sampling updates alpha/beta counts:
     - Accept → increment α for that time slot
@@ -232,7 +255,7 @@ __mocks__/
 
 ### Date Utilities (`utils/date-helpers.ts`)
 - **Grid generation:** `getMonthGrid()`, `getWeekDates()`
-- **Event filtering:** `getEventsForDay()`, `getEventsForWeek()`, `getEventsForToday()`, `getEventsForTomorrow()`, `getEventsThisWeek()`
+- **Event filtering:** `getEventsForDay()`, `getEventsForWeek()`, `getEventsForToday()`, `getEventsForTomorrow()`, `getEventsThisWeek()`, `getFutureEvents()` (all events after today)
 - **Formatting:** `formatTime()`, `formatDateRange()`, `formatDateSectionHeader()`
 - **Comparison:** `isSameDay()`
 - **Time grid:** `getEventTopOffset()`, `getEventHeight()`
@@ -259,7 +282,8 @@ __mocks__/
 - **Chat integrated with calendars** — each shared calendar has its own group chat
 - **Consistent card design** — event invites in chat use same card design as pending items (icon, title, action buttons)
 - **Modal headers** — all modal screens use custom headers with `headerShown: false` to avoid duplicate navigation bars
-- **Owner-based permissions** — only event creators (createdBy field) can edit or delete events; non-owners see read-only view
+- **Owner-based permissions** — only event creators (`createdBy` field) can edit or delete events; linked event copies (invitee copies) are never editable even if `createdBy` matches (checked via `!linkedEventId`)
+- **Linked event copies** — when an invitee accepts an event, a copy is created in their calendar with `linkedEventId` pointing to the original and `originalCreatedBy` set to the organizer's ID
 - **Status syncing** — event invite status automatically syncs between pending items and chat messages using shared eventId
 - **Reference-only pending items** — PendingItem stores only references (eventId, calendarId), not duplicates; UI enriches with event/calendar data client-side for single source of truth
 
@@ -275,11 +299,12 @@ __mocks__/
   - Shows only items with `status === 'pending'`
   - Color-coded icons by item type
 - **Upcoming Events Timeline:**
-  - Grouped by "Today", "Tomorrow", "This Week"
-  - Sub-grouped by date within "This Week"
+  - Grouped by "Today", "Tomorrow", and "Upcoming" (all future dates)
+  - Sub-grouped by date within "Upcoming"
   - Event cards with time, location, calendar color
   - Tap any event to view full details
   - Empty state with helpful message
+  - **Pull-to-refresh:** Refreshes both calendars and pending items
 - **AI Input Bar:** Natural-language scheduling input at bottom
 - **Add Button:** Quick access to create new events
 
@@ -305,9 +330,9 @@ __mocks__/
   - Change color (8 preset colors)
   - Switch between personal/shared types
   - **Member management** (shared calendars only):
-    - Add members via user search
-    - View all members with avatars
-    - Remove members (except owner)
+    - Add members via user search — uses `addCalendarMember` API action
+    - View all members with avatars (live from context, not local state)
+    - Remove members with confirmation dialog — uses `removeCalendarMember` API action
     - Owner badge displayed
   - Save changes button
   - Delete calendar with confirmation
@@ -332,6 +357,7 @@ __mocks__/
     - **Status syncing:** Accepting/declining event invites syncs status to pending items automatically
     - Tap card to view full event details
     - Different appearance for sent vs received invites
+  - **Event update messages:** Rendered as inline system messages (smaller, centered) with tap-to-view-detail
   - Message timestamps
   - Sender names for group chats
   - Different bubble styles for sent/received messages
@@ -384,12 +410,16 @@ __mocks__/
   - Full event information with calendar color bar
   - Date and time with formatted display
   - Location with map pin icon
-  - Invitee list with avatars
+  - **Invitee list with RSVP status badges** — accepted (green), declined (red), pending (grey); names resolved via `getUser`/`fetchUser`
   - Description
   - Recurrence info
   - Reminders list
-  - **Edit button** - only visible to event owner (createdBy field)
+  - **Edit button** - only visible to event owner (`createdBy` field, excluding linked event copies)
   - **Delete button** - only visible to event owner with confirmation
+  - **"You were invited" badge** - shown on linked event copies (events created when accepting an invite)
+  - **RSVP status badge** - shown on linked copies: green "Accepted", red "Declined", or grey "Pending" derived from `pendingItems`
+  - **Organizer section** - shown on linked copies, displays original creator's name (from `originalCreatedBy` field)
+  - **API fetch for pending invites** - if the event is not in local state (e.g., opened from a push notification before accepting), fetches from `GET /pending-items/event/{eventId}`; shows loading spinner while fetching; shows "Invitation (not yet accepted)" as calendar name if the calendar hasn't been added yet
 - **Create Events:**
   - Event fields: title, calendar, all-day toggle, start/end time, location, description
   - **Calendar Selection:**
@@ -402,7 +432,7 @@ __mocks__/
     - Visual invitee chips with remove option
     - Shows count of invited people
   - **Availability Checker:**
-    - Real-time availability view for all invitees
+    - Real-time availability view for all invitees using **real CalendarContext data** (not mock data)
     - Visual status indicators: checkmark (available) / X icon (busy)
     - Shows "Available" or conflict count per person
     - Color-coded borders: green (available) / red (busy)
@@ -411,6 +441,7 @@ __mocks__/
     - Summary: "X available • Y busy"
     - Updates when time/date changes
     - **Smart conflict detection:** When editing events, excludes the current event from conflict checking (event doesn't count as conflicting with itself)
+    - Invitee display names resolved via `getUser`/`fetchUser`
 - **Edit Events:**
   - **Owner-only permission** - only event creator can edit
   - Permission denied screen shown to non-owners
@@ -431,8 +462,8 @@ __mocks__/
 - **User Review:** User can edit all fields before creating event
 - **AI Attribution Badge:** Shows original input on create screen and event detail
 - **Edit Tracking:** Tracks which fields user changed (for RL training)
-- **Mock Parser:** `utils/ai-parser.ts` simulates AI parsing (backend integration TBD)
-- **Future:** AWS Bedrock (Claude Haiku 4.5 for speed, Sonnet 4.5 for complex requests)
+- **Server-side parsing:** `utils/ai-parser.ts` now only exports types — actual parsing is done server-side by AWS Bedrock (see `Peachy-Infra/lambda/ai/parse/`)
+- **Future:** Full AWS Bedrock integration (Claude Haiku 4.5 for speed, Sonnet 4.5 for complex requests)
 
 ### Navigation
 - 4 tabs: Home (agenda), Calendars (grid + management), Chat (conversations), Profile (settings)
@@ -565,25 +596,28 @@ All mock data uses realistic timestamps relative to "now" for testing time-based
 ### Frontend Integration Checklist
 
 **Phase 1: Authentication**
-- [ ] Replace mock user with Cognito SDK
-- [ ] Implement login/signup screens
-- [ ] Store JWT tokens in Expo SecureStore
-- [ ] Auto-refresh tokens on 401 errors
+- [x] Replace mock user with Cognito SDK (`amazon-cognito-identity-js`)
+- [x] Implement login/signup screens
+- [x] Store JWT tokens in Expo SecureStore
+- [x] Auto-refresh tokens on 401 errors
+- [ ] `exchangeOAuthCode` (Google Sign-In OAuth) — stub implemented, needs backend
 
 **Phase 2: REST API Integration**
-- [ ] Create API client (axios with interceptors)
-- [ ] Replace CalendarContext with API calls
+- [x] Create API client (`utils/api-client.ts`) with JWT auth and 401 auto-logout
+- [x] Replace CalendarContext with API calls
+- [x] Optimistic updates (update UI immediately, revert on error)
 - [ ] Add loading states to all screens
 - [ ] Add error handling (toast notifications)
-- [ ] Implement optimistic updates (update UI immediately, revert on error)
 
 **Phase 3: Chat & Updates**
 - [ ] Implement pull-to-refresh for chat messages
 - [ ] Add optimistic updates for sent messages
 - [ ] Implement message polling (5s interval when chat is open)
 - [ ] Add loading states for message fetching
+- [x] Pull-to-refresh on Home screen (refreshes calendars + pending items)
 - [x] Refresh pending items when accepting/declining
 - [x] Pending items: load from `GET /pending-items`, accept/decline via API, push notifications on invite
+- [x] Calendar member add/remove via API (`addCalendarMember`, `removeCalendarMember`)
 - [ ] Refresh calendar data when navigating to Calendars screen
 - [ ] Add offline queue for failed message sends
 
@@ -600,12 +634,13 @@ All mock data uses realistic timestamps relative to "now" for testing time-based
 
 **Phase 6: AI Features**
 - ✅ AI input bar with text input
-- ✅ Mock AI parser (`utils/ai-parser.ts`)
+- ✅ AI parsing moved to server (`utils/ai-parser.ts` now type-only)
 - ✅ Pre-fill event create form with AI-suggested data
 - ✅ AI attribution badges (create screen + event detail)
 - ✅ Track edited fields for RL training
-- [ ] Integrate AWS Bedrock (Claude Haiku/Sonnet)
-- [ ] Voice-to-text transcription
+- ✅ RL feedback sent on AI suggestion acceptance
+- ✅ Voice recording with `expo-av` + transcription via backend API
+- [ ] Full AWS Bedrock integration (Claude Haiku/Sonnet)
 - [ ] Smart scheduling suggestions (auto-detect conflicts, suggest better times)
 - [ ] Auto-schedule (AI picks best time slot based on availability)
 
