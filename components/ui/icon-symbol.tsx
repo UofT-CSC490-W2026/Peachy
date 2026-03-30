@@ -1,0 +1,83 @@
+// Fallback for using MaterialIcons on Android and web.
+
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { SymbolWeight, SymbolViewProps } from 'expo-symbols';
+import { ComponentProps } from 'react';
+import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
+
+type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
+export type IconSymbolName = keyof typeof MAPPING;
+
+/**
+ * Add your SF Symbols to Material Icons mappings here.
+ * - see Material Icons in the [Icons Directory](https://icons.expo.fyi).
+ * - see SF Symbols in the [SF Symbols](https://developer.apple.com/sf-symbols/) app.
+ */
+const MAPPING = {
+  'house.fill': 'home',
+  'paperplane.fill': 'send',
+  'chevron.left.forwardslash.chevron.right': 'code',
+  'chevron.right': 'chevron-right',
+  'chevron.left': 'chevron-left',
+  'chevron.up': 'expand-less',
+  'chevron.down': 'expand-more',
+  'calendar': 'calendar-today',
+  'bubble.left.fill': 'chat-bubble',
+  'person.fill': 'person',
+  'plus': 'add',
+  'mic.fill': 'mic',
+  'arrow.up.circle.fill': 'arrow-circle-up',
+  'xmark': 'close',
+  'clock': 'access-time',
+  'mappin': 'place',
+  'bell': 'notifications',
+  'repeat': 'repeat',
+  'person.2': 'people',
+  'note.text': 'description',
+  'checkmark.circle.fill': 'check-circle',
+  'sparkles': 'auto-awesome',
+  'line.horizontal.3': 'menu',
+  'stop.fill': 'stop',
+  // Google Calendar sync icons
+  'calendar.badge.plus': 'event-available',
+  'arrow.2.circlepath': 'sync',
+  'paintpalette.fill': 'palette',
+  'checkmark.shield.fill': 'verified-user',
+  'checkmark': 'check',
+  // Settings icons
+  'paintbrush.fill': 'brush',
+  'person.crop.circle': 'account-circle',
+  'bell.fill': 'notifications',
+  'link': 'link',
+  'clock.fill': 'schedule',
+  '1.circle': 'looks-one',
+  'person.2.fill': 'people',
+  'eye.fill': 'visibility',
+  'chart.bar.fill': 'bar-chart',
+  'lock.fill': 'lock',
+  'hand.raised.fill': 'front-hand',
+  'key.fill': 'vpn-key',
+  'questionmark.circle.fill': 'help',
+  'star.fill': 'star',
+  'info.circle.fill': 'info',
+} as IconMapping;
+
+/**
+ * An icon component that uses native SF Symbols on iOS, and Material Icons on Android and web.
+ * This ensures a consistent look across platforms, and optimal resource usage.
+ * Icon `name`s are based on SF Symbols and require manual mapping to Material Icons.
+ */
+export function IconSymbol({
+  name,
+  size = 24,
+  color,
+  style,
+}: {
+  name: IconSymbolName;
+  size?: number;
+  color: string | OpaqueColorValue;
+  style?: StyleProp<TextStyle>;
+  weight?: SymbolWeight;
+}) {
+  return <MaterialIcons color={color} size={size} name={MAPPING[name]} style={style} />;
+}

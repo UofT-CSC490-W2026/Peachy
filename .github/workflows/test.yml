@@ -1,0 +1,122 @@
+name: Tests
+
+on:
+  # Auto-run on pushes and PRs to dev and main
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  # Allow manual trigger from GitHub Actions tab
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Run Tests & Coverage
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit & Component Tests (with coverage)
+        run: npm run test:coverage -- --ci --json --outputFile=report.json --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 14
+
+      - name: Post coverage comment on PR
+        uses: ArtiomTr/jest-coverage-report-action@v2
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        with:
+          coverage-file: report.json
+          base-coverage-file: report.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          skip-step: all
+
+      - name: Extract coverage metrics
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        id: coverage
+        run: |
+          node -e "
+            const s = require('./coverage/coverage-summary.json').total;
+            const pct = (key) => Math.round(s[key].pct);
+            console.log('lines=' + pct('lines'));
+            console.log('statements=' + pct('statements'));
+            console.log('functions=' + pct('functions'));
+            console.log('branches=' + pct('branches'));
+          " >> $GITHUB_OUTPUT
+
+      - name: Badge — Lines
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: ${{ secrets.GIST_ID }}
+          filename: peachy-coverage-lines.json
+          label: lines
+          message: ${{ steps.coverage.outputs.lines }}%
+          valColorRange: ${{ steps.coverage.outputs.lines }}
+          maxColorRange: 100
+          minColorRange: 50
+
+      - name: Badge — Statements
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: ${{ secrets.GIST_ID }}
+          filename: peachy-coverage-statements.json
+          label: statements
+          message: ${{ steps.coverage.outputs.statements }}%
+          valColorRange: ${{ steps.coverage.outputs.statements }}
+          maxColorRange: 100
+          minColorRange: 50
+
+      - name: Badge — Functions
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: ${{ secrets.GIST_ID }}
+          filename: peachy-coverage-functions.json
+          label: functions
+          message: ${{ steps.coverage.outputs.functions }}%
+          valColorRange: ${{ steps.coverage.outputs.functions }}
+          maxColorRange: 100
+          minColorRange: 50
+
+      - name: Badge — Branches
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: ${{ secrets.GIST_ID }}
+          filename: peachy-coverage-branches.json
+          label: branches
+          message: ${{ steps.coverage.outputs.branches }}%
+          valColorRange: ${{ steps.coverage.outputs.branches }}
+          maxColorRange: 100
+          minColorRange: 50
