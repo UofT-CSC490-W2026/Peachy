@@ -6,14 +6,18 @@ import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useCalendar } from '@/contexts/calendar-context';
-import { User } from '@/types';
+import { useAuth } from '@/contexts/auth-context';
+import { createApiClient } from '@/utils/api-client';
+import type { User, Calendar } from '@/types';
 
 export default function ChatMembersScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ calendarId: string }>();
   const calendarId = Array.isArray(params.calendarId) ? params.calendarId[0] : params.calendarId;
 
-  const { calendars, fetchUser } = useCalendar();
+  const { fetchUser } = useCalendar();
+  const { getIdToken } = useAuth();
+  const apiClient = useMemo(() => createApiClient(getIdToken), [getIdToken]);
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
@@ -22,27 +26,28 @@ export default function ChatMembersScreen() {
   const [members, setMembers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const calendar = useMemo(
-    () => calendars.find(c => c.id === calendarId),
-    [calendars, calendarId],
-  );
-
   useEffect(() => {
-    if (!calendar) {
+    if (!calendarId) {
       setIsLoading(false);
       return;
     }
     let cancelled = false;
     setIsLoading(true);
 
-    Promise.all(calendar.memberIds.map(id => fetchUser(id)))
+    apiClient.get<Calendar>(`calendars/${calendarId}`)
+      .then(cal =>
+        Promise.all((cal.memberIds ?? []).map(id => fetchUser(id)))
+      )
       .then(results => {
         if (!cancelled) setMembers(results.filter((u): u is User => !!u));
+      })
+      .catch(() => {
+        if (!cancelled) setMembers([]);
       })
       .finally(() => { if (!cancelled) setIsLoading(false); });
 
     return () => { cancelled = true; };
-  }, [calendar, fetchUser]);
+  }, [calendarId, apiClient, fetchUser]);
 
   const renderMember = ({ item }: { item: User }) => (
     <Pressable

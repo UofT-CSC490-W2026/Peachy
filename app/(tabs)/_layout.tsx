@@ -26,7 +26,7 @@ import { useCalendar } from '@/contexts/calendar-context';
 import { ApiError, AuthError } from '@/utils/api-client';
 import type { AIParseResult } from '@/utils/ai-parser';
 import { transcribeAudio } from '@/utils/audio-transcribe';
-import { getSlotIndex } from '@/utils/rl-helpers';
+
 import { useRouter } from 'expo-router';
 
 export default function TabLayout() {
@@ -34,8 +34,8 @@ export default function TabLayout() {
   const theme = Colors[colorScheme ?? 'light'];
   const tabBarBg = theme.surface;
   const router = useRouter();
-  const { user, getIdToken } = useAuth();
-  const { calendars, createEvent } = useCalendar();
+  const { getIdToken } = useAuth();
+  const { calendars } = useCalendar();
 
   const [tabBarHeight, setTabBarHeight] = useState(0);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
@@ -165,44 +165,35 @@ export default function TabLayout() {
       const parsed = await response.json() as AIParseResult;
       const data = parsed.extractedData;
 
-      const calendarId = calendars[0]?.id;
-      if (!calendarId) {
+      if (!calendars.length) {
         Alert.alert('No Calendar', 'Please create a calendar first before using AI scheduling.');
         closeSheet();
         return;
       }
 
-      await createEvent(calendarId, {
-        title: data.title || 'Untitled Event',
-        startTime: data.startTime,
-        endTime: data.endTime,
-        isAllDay: data.isAllDay ?? false,
-        timezone,
-        ...(data.location ? { location: data.location } : {}),
-        invitedUserIds: data.invitedUserIds || [],
-        aiGenerated: true,
-        aiInput: message,
-        aiSuggested: parsed,
-      });
-
-      if (user && data.startTime) {
-        const suggestedSlotIndex = getSlotIndex(new Date(data.startTime));
-        fetch(`${apiUrl}/users/${encodeURIComponent(user.id)}/rl/feedback`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ action: 'accept', suggestedSlotIndex }),
-        }).catch(() => {});
-      }
-
       closeSheet();
-      Alert.alert('Event Created', `"${data.title}" has been added to your calendar.`);
+
+      router.push({
+        pathname: '/event-create',
+        params: {
+          title: data.title || '',
+          startTime: data.startTime || '',
+          endTime: data.endTime || '',
+          isAllDay: data.isAllDay ? 'true' : 'false',
+          ...(data.location ? { location: data.location } : {}),
+          ...(data.invitedUserIds?.length ? { inviteeIds: data.invitedUserIds.join(',') } : {}),
+          aiGenerated: 'true',
+          aiInput: message,
+          aiSuggested: JSON.stringify(parsed),
+        },
+      });
     } catch (err) {
       console.error('AI send error:', err);
       Alert.alert('Error', 'Could not create event. Please try again.');
     } finally {
       setIsLoading(false);
     }
-  }, [inputText, isLoading, getIdToken, closeSheet, calendars, createEvent, user]);
+  }, [inputText, isLoading, getIdToken, closeSheet, calendars, router]);
 
   const renderTabBar = useCallback((props: BottomTabBarProps) => (
     <View>

@@ -18,6 +18,7 @@ export default {
       bundleIdentifier: IS_DEV ? 'com.peachy.dev' : 'com.peachy.app',
       infoPlist: {
         UIViewControllerBasedStatusBarAppearance: true,
+        NSMicrophoneUsageDescription: 'Peachy uses your microphone to transcribe voice input for AI scheduling.',
       },
     },
     android: {

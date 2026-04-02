@@ -32,15 +32,12 @@ export default function EventCreateScreen() {
   const isAIGenerated = params.aiGenerated === 'true';
   const aiInput = params.aiInput as string | undefined;
 
-  const ownedCalendars = useMemo(
-    () => calendars.filter(c => c.ownerId === user?.id),
-    [calendars, user?.id]
-  );
-  const hasOwnedCalendars = ownedCalendars.length > 0;
+  const availableCalendars = calendars;
+  const hasAvailableCalendars = availableCalendars.length > 0;
 
   // Pre-fill from AI params or start empty
   const [title, setTitle] = useState(params.title as string || '');
-  const [selectedCalendar, setSelectedCalendar] = useState(ownedCalendars[0] ?? null);
+  const [selectedCalendar, setSelectedCalendar] = useState(availableCalendars[0] ?? null);
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [isAllDay, setIsAllDay] = useState(params.isAllDay === 'true');
   const [startDate, setStartDate] = useState(() => {
@@ -84,14 +81,14 @@ export default function EventCreateScreen() {
 
   // Set default calendar once calendars load (handles async context initialization)
   useEffect(() => {
-    if (!selectedCalendar && ownedCalendars.length > 0) {
-      setSelectedCalendar(ownedCalendars[0]);
+    if (!selectedCalendar && availableCalendars.length > 0) {
+      setSelectedCalendar(availableCalendars[0]);
       return;
     }
-    if (selectedCalendar && !ownedCalendars.find(c => c.id === selectedCalendar.id)) {
-      setSelectedCalendar(ownedCalendars[0] ?? null);
+    if (selectedCalendar && !availableCalendars.find(c => c.id === selectedCalendar.id)) {
+      setSelectedCalendar(availableCalendars[0] ?? null);
     }
-  }, [ownedCalendars, selectedCalendar]);
+  }, [availableCalendars, selectedCalendar]);
 
   // Fetch display names for invitees not already in the user cache
   useEffect(() => {
@@ -144,8 +141,8 @@ export default function EventCreateScreen() {
   }, [invitedUserIds, selectedCalendar, calendarMemberIds, inviteeDisplayNames, getUser]);
 
   const handleSave = async () => {
-    if (!hasOwnedCalendars) {
-      Alert.alert('No Owned Calendars', 'Create or own a calendar before creating events.');
+    if (!hasAvailableCalendars) {
+      Alert.alert('No Calendars', 'Create or join a calendar before creating events.');
       return;
     }
     if (!title.trim()) {
@@ -254,12 +251,12 @@ export default function EventCreateScreen() {
           </View>
         )}
 
-        {!hasOwnedCalendars && (
+        {!hasAvailableCalendars && (
           <View style={[styles.emptyStateCard, { backgroundColor: surfaceColor, borderColor }]}
           >
-            <ThemedText type="defaultSemiBold">No owned calendars</ThemedText>
+            <ThemedText type="defaultSemiBold">No calendars</ThemedText>
             <ThemedText style={{ color: tintColor }}>
-              Create or own a calendar to add events.
+              Create or join a calendar to add events.
             </ThemedText>
           </View>
         )}
@@ -277,7 +274,7 @@ export default function EventCreateScreen() {
           <FormPickerRow
             label={selectedCalendar?.name ?? 'Select Calendar'}
             value={selectedCalendar?.type ?? ''}
-            onPress={() => hasOwnedCalendars && setShowCalendarPicker(true)}
+            onPress={() => hasAvailableCalendars && setShowCalendarPicker(true)}
           />
         </FormField>
 
@@ -383,11 +380,11 @@ export default function EventCreateScreen() {
           </Pressable>
           <Pressable
             onPress={handleSave}
-            disabled={isSaving || !hasOwnedCalendars}
+            disabled={isSaving || !hasAvailableCalendars}
             style={[
               styles.button,
               styles.saveButton,
-              { backgroundColor: tintColor, opacity: isSaving || !hasOwnedCalendars ? 0.5 : 1 },
+              { backgroundColor: tintColor, opacity: isSaving || !hasAvailableCalendars ? 0.5 : 1 },
             ]}
           >
             {isSaving ? (
@@ -421,7 +418,7 @@ export default function EventCreateScreen() {
               </Pressable>
             </View>
             <ScrollView style={styles.calendarList}>
-              {ownedCalendars.map((calendar) => (
+              {availableCalendars.map((calendar) => (
                 <Pressable
                   key={calendar.id}
                   style={[
