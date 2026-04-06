@@ -32,7 +32,7 @@ export default function EventCreateScreen() {
   const isAIGenerated = params.aiGenerated === 'true';
   const aiInput = params.aiInput as string | undefined;
 
-  const availableCalendars = calendars;
+  const availableCalendars = calendars.filter(c => c.ownerId === user?.id);
   const hasAvailableCalendars = availableCalendars.length > 0;
 
   // Pre-fill from AI params or start empty
