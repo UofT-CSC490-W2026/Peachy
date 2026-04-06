@@ -34,7 +34,7 @@ export default function TabLayout() {
   const theme = Colors[colorScheme ?? 'light'];
   const tabBarBg = theme.surface;
   const router = useRouter();
-  const { getIdToken } = useAuth();
+  const { getIdToken, user } = useAuth();
   const { calendars } = useCalendar();
 
   const [tabBarHeight, setTabBarHeight] = useState(0);
@@ -165,8 +165,9 @@ export default function TabLayout() {
       const parsed = await response.json() as AIParseResult;
       const data = parsed.extractedData;
 
-      if (!calendars.length) {
-        Alert.alert('No Calendar', 'Please create a calendar first before using AI scheduling.');
+      const ownedCalendars = calendars.filter(c => c.ownerId === user?.id);
+      if (!ownedCalendars.length) {
+        Alert.alert('No Calendar', 'You need at least one calendar you own before using AI scheduling.');
         closeSheet();
         return;
       }
@@ -189,7 +190,7 @@ export default function TabLayout() {
       });
     } catch (err) {
       console.error('AI send error:', err);
-      Alert.alert('Error', 'Could not create event. Please try again.');
+      Alert.alert('Error', 'Could not process your AI scheduling request. Please try again.');
     } finally {
       setIsLoading(false);
     }

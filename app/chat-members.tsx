@@ -1,4 +1,4 @@
-import { StyleSheet, View, FlatList, Pressable, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, FlatList, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect, useMemo } from 'react';
 import { ThemedText } from '@/components/themed-text';
@@ -7,7 +7,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useCalendar } from '@/contexts/calendar-context';
 import { useAuth } from '@/contexts/auth-context';
-import { createApiClient } from '@/utils/api-client';
+import { AuthError, createApiClient } from '@/utils/api-client';
 import type { User, Calendar } from '@/types';
 
 export default function ChatMembersScreen() {
@@ -16,7 +16,7 @@ export default function ChatMembersScreen() {
   const calendarId = Array.isArray(params.calendarId) ? params.calendarId[0] : params.calendarId;
 
   const { fetchUser } = useCalendar();
-  const { getIdToken } = useAuth();
+  const { getIdToken, logout } = useAuth();
   const apiClient = useMemo(() => createApiClient(getIdToken), [getIdToken]);
   const tintColor = useThemeColor({}, 'tint');
   const surfaceColor = useThemeColor({}, 'surface');
@@ -41,8 +41,16 @@ export default function ChatMembersScreen() {
       .then(results => {
         if (!cancelled) setMembers(results.filter((u): u is User => !!u));
       })
-      .catch(() => {
-        if (!cancelled) setMembers([]);
+      .catch((err) => {
+        if (cancelled) return;
+        if (err instanceof AuthError) {
+          Alert.alert('Session Expired', 'Please log in again.', [
+            { text: 'OK', onPress: () => logout() },
+          ]);
+        } else {
+          Alert.alert('Error', 'Could not load members.');
+          setMembers([]);
+        }
       })
       .finally(() => { if (!cancelled) setIsLoading(false); });
 
